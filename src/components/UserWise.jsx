@@ -44,7 +44,7 @@ const UserWise = () => {
 
   const fetchUnitList = async () => {
     try {
-      const response = await axios.post('/api/reportanalytics/getUnitList', {}, {
+      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {}, {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -61,7 +61,7 @@ const UserWise = () => {
 
   const fetchQuizList = async () => {
     try {
-      const response = await axios.post('/api/reportanalytics/getQuizList', {}, {
+      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getQuizList', {}, {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -105,7 +105,7 @@ const UserWise = () => {
     setLoading(true); // Start loading state before making the request
 
     try {
-      const response = await axios.post('/api/reportanalytics/getMainCompetencyUserReport', requestBody, {
+      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetencyUserReport', requestBody, {
         headers: { 'Content-Type': 'application/json' },
       });
 

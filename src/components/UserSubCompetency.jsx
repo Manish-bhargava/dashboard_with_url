@@ -36,7 +36,7 @@ const UserSubCompetency = () => {
   const fetchUnitsFromAPI = async () => {
     try {
       setLoading(true);
-      const res = await axios.post('/api/reportanalytics/getUnitList', {});
+      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {});
       if (res.data?.status === 'success') {
         const allUnits = [...res.data.units.North, ...res.data.units.South];
         setUnits(allUnits);
@@ -53,7 +53,7 @@ const UserSubCompetency = () => {
   const fetchCompetenciesFromAPI = async () => {
     try {
       setLoading(true);
-      const res = await axios.post('/api/reportanalytics/getMainCompetency', {});
+      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetency', {});
       if (res.data?.status === 'success' && Array.isArray(res.data.data)) {
         const allSections = res.data.data.flatMap((entry) => entry.sections);
         const filteredCompetencies = allowedCompetencies.filter((comp) =>
@@ -104,7 +104,7 @@ const UserSubCompetency = () => {
       setLoading(true);
       setError(null);
       const response = await axios.post(
-        '/api/reportanalytics/getSubCometencyUnitReport',
+        'https://mhbodhi.medtalent.co/api/reportanalytics/getSubCometencyUnitReport',
         requestBody
       );
       console.log('Sub Competency Unit Report API Response:', response.data);

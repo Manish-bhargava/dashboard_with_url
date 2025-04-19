@@ -27,7 +27,7 @@ const SubCompetency = () => {
     const fetchUnits = async () => {
       try {
         console.log('Fetching units...');
-        const res = await fetch('/api/reportanalytics/getUnitList', {
+        const res = await fetch('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -109,7 +109,7 @@ const SubCompetency = () => {
 
     try {
       console.log('🌐 Fetching report data from API...');
-      const res = await fetch('/api/reportanalytics/getSubCometencyUserReport', {
+      const res = await fetch('https://mhbodhi.medtalent.co/api/reportanalytics/getSubCompetency', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,7 +180,7 @@ const SubCompetency = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/reportanalytics/getSubCometencyUserReport', {
+        const response = await fetch('https://mhbodhi.medtalent.co/api/reportanalytics/getSubCometencyUserReport', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
