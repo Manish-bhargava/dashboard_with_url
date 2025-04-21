@@ -25,9 +25,7 @@ const MainCompetency = () => {
 
   const fetchUnitList = async () => {
     try {
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {}, {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {});
       if (res.data.status === 'success') {
         const allUnits = [...res.data.units.North, ...res.data.units.South];
         setUnits(allUnits);
@@ -39,9 +37,7 @@ const MainCompetency = () => {
 
   const fetchQuizList = async () => {
     try {
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getQuizList', {}, {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getQuizList', {});
       if (Array.isArray(res.data)) {
         setQuizList(res.data);
       }
@@ -90,10 +86,7 @@ const MainCompetency = () => {
       setLoading(true);
       const response = await axios.post(
         'https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetencyUnitReport',
-        requestBody,
-        {
-          headers: { 'Content-Type': 'application/json' }
-        }
+        requestBody
       );
 
       if (response.data) {

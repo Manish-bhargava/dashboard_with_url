@@ -4,16 +4,18 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 3000,
-    open: true, // Automatically open browser when starting the server
-    cors: true, // Enable CORS for development
-  },
   build: {
     outDir: 'dist',
-    sourcemap: true, 
+    assetsDir: 'assets',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'vendor': ['react-router-dom', 'axios'],
+        },
+      },
+    },
   },
-  preview: {
-    port: 3000,
-  },
+  base: '/', // Set this to your production base path if needed
 });
