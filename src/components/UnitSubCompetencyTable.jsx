@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './CompetencyTable.css';
 
 const topicIdToSubCompetencyMap = {
@@ -31,50 +31,38 @@ const topicIdToSubCompetencyMap = {
 };
 
 const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
+  console.log('🔄 Component render started');
+  
+  // All hooks must be called at the top level, unconditionally
   const [searchTerm, setSearchTerm] = useState('');
+  console.log('📝 searchTerm state:', searchTerm);
+  
   const [sortConfig, setSortConfig] = useState({
     key: 'totalScore',
     direction: 'none'
   });
-  
-  console.log('📦 Table received props:', { data, selectedCompetency });
+  console.log('🔀 sortConfig state:', sortConfig);
 
   const reportData = data?.data || data;
-  if (!reportData || typeof reportData !== 'object') {
-    console.log('❌ Invalid data');
-    return <div className="no-data">No data available. Please check your selected filters and try again.</div>;
-  }
+  console.log('📊 reportData:', reportData);
+  
+  // Move useMemo hooks to the top level
+  const relevantTopics = useMemo(() => {
+    console.log('🔍 Calculating relevantTopics');
+    const topics = Object.entries(topicIdToSubCompetencyMap)
+      .filter(([, [, comp]]) => comp === selectedCompetency)
+      .map(([topicId, [name]]) => ({ topicId, name }));
+    console.log('📋 relevantTopics result:', topics);
+    return topics;
+  }, [selectedCompetency]);
 
-  const relevantTopics = Object.entries(topicIdToSubCompetencyMap)
-    .filter(([, [, comp]]) => comp === selectedCompetency)
-    .map(([topicId, [name]]) => ({ topicId, name }));
-
-  if (relevantTopics.length === 0) {
-    return <div className="no-data">No competency topics selected. Please select a competency to view the data.</div>;
-  }
-
-  console.log('🔎 Relevant topics:', relevantTopics);
-
-  const renderPercentileBar = (value) => {
-    if (!value || value === '-') return '-';
-    const percentage = parseFloat(value);
-    if (isNaN(percentage)) return '-';
-    
-    return (
-      <div className="percentile-cell-container">
-        <div className="mini-percentile-bar">
-          <div 
-            className="mini-percentile-fill" 
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-        <span className="percentile-value">{percentage.toFixed(2)}</span>
-      </div>
-    );
-  };
-
-  // Create rows with search filtering
   const tableRows = useMemo(() => {
+    console.log('📈 Calculating tableRows');
+    if (!reportData || typeof reportData !== 'object') {
+      console.log('❌ Invalid reportData for tableRows');
+      return [];
+    }
+    
     const rows = [];
     let sno = 1;
 
@@ -116,31 +104,58 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
       });
     });
 
-    // Filter rows based on search term
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return rows.filter(row => 
-        row.unit.toLowerCase().includes(searchLower) ||
-        row.department.toLowerCase().includes(searchLower) ||
-        row.studentName.toLowerCase().includes(searchLower)
-      );
-    }
-
+    console.log('📊 tableRows result:', rows);
     return rows;
-  }, [reportData, searchTerm, relevantTopics]);
+  }, [reportData, relevantTopics]);
 
-  // Filter data based on search term
-  const filteredRows = tableRows.filter(row => {
-    if (!searchTerm) return true;
+  const filteredRows = useMemo(() => {
+    console.log('🔍 Filtering rows with searchTerm:', searchTerm);
+    if (!searchTerm) {
+      console.log('📊 No search term, returning all rows');
+      return tableRows;
+    }
     const searchLower = searchTerm.toLowerCase();
-    return (
-      row.studentName?.toLowerCase().includes(searchLower) ||
-      row.unit?.toLowerCase().includes(searchLower) ||
-      row.department?.toLowerCase().includes(searchLower)
+    const filtered = tableRows.filter(row => 
+      row.unit.toLowerCase().includes(searchLower) ||
+      row.department.toLowerCase().includes(searchLower) ||
+      row.studentName.toLowerCase().includes(searchLower)
     );
+    console.log('📊 Filtered rows result:', filtered);
+    return filtered;
+  }, [tableRows, searchTerm]);
+
+  const sortedAndFilteredRows = useMemo(() => {
+    console.log('🔄 Sorting rows with config:', sortConfig);
+    const sorted = [...filteredRows].sort((a, b) => {
+      const aValue = a.totalScore === '-' ? -Infinity : parseFloat(a.totalScore);
+      const bValue = b.totalScore === '-' ? -Infinity : parseFloat(b.totalScore);
+      return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+    console.log('📊 Sorted rows result:', sorted);
+    return sorted;
+  }, [filteredRows, sortConfig.direction]);
+
+  // Add effect to track component lifecycle
+  useEffect(() => {
+    console.log('🎯 Component mounted/updated');
+    return () => {
+      console.log('🧹 Component cleanup');
+    };
   });
 
+  // Early returns after all hooks
+  if (!reportData || typeof reportData !== 'object') {
+    console.log('❌ Invalid data structure');
+    return <div className="no-data">No data available. Please check your selected filters and try again.</div>;
+  }
+
+  if (relevantTopics.length === 0) {
+    console.log('❌ No relevant topics found');
+    return <div className="no-data">No competency topics selected. Please select a competency to view the data.</div>;
+  }
+
   if (filteredRows.length === 0) {
+    console.log('❌ No filtered rows found');
     return (
       <div className="table-container">
         <div className="search-container">
@@ -156,6 +171,26 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
       </div>
     );
   }
+
+  console.log('🎨 Rendering table with rows:', sortedAndFilteredRows.length);
+
+  const renderPercentileBar = (value) => {
+    if (!value || value === '-') return '-';
+    const percentage = parseFloat(value);
+    if (isNaN(percentage)) return '-';
+    
+    return (
+      <div className="percentile-cell-container">
+        <div className="mini-percentile-bar">
+          <div 
+            className="mini-percentile-fill" 
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <span className="percentile-value">{percentage.toFixed(2)}</span>
+      </div>
+    );
+  };
 
   const safeValue = (val) =>
     val === null || val === undefined || val === '' ? '-' : val;
@@ -204,12 +239,6 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
       return { key, direction: 'asc' };
     });
   };
-
-  const sortedAndFilteredRows = [...filteredRows].sort((a, b) => {
-    const aValue = a.totalScore === '-' ? -Infinity : parseFloat(a.totalScore);
-    const bValue = b.totalScore === '-' ? -Infinity : parseFloat(b.totalScore);
-    return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
-  });
 
   return (
     <div className="table-container">
