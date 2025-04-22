@@ -126,9 +126,7 @@
   overflow-y: auto;
   
 }
-.dropdown-menu::-webkit-scrollbar {
-  display: none;
-}
+
 .dropdown-item {
   display: flex;
   align-items: center;

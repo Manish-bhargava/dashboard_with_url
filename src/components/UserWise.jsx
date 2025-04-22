@@ -4,7 +4,7 @@ import axios from 'axios';
 import CompetencyTable from './CompetencyTable';
 import * as XLSX from 'xlsx';
 import { ClipLoader } from 'react-spinners'; // Import spinner component (if using `react-spinners`)
-
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const UserWise = () => {
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [selectedTests, setSelectedTests] = useState([]);
@@ -44,7 +44,7 @@ const UserWise = () => {
 
   const fetchUnitList = async () => {
     try {
-      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {}, {
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {}, {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -61,7 +61,7 @@ const UserWise = () => {
 
   const fetchQuizList = async () => {
     try {
-      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getQuizList', {}, {
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getQuizList`, {}, {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -99,13 +99,15 @@ const UserWise = () => {
       unit: selectedUnits,
       quiz_id: selectedQuizIds
     };
+   // Target API endpoint
+
 
     console.log("📦 Request Body:", requestBody);
 
     setLoading(true); // Start loading state before making the request
 
     try {
-      const response = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetencyUserReport', requestBody, {
+        const response = await axios.post(`${BASE_URL}/reportanalytics/getMainCompetencyUserReport`, requestBody, {
         headers: { 'Content-Type': 'application/json' },
       });
 

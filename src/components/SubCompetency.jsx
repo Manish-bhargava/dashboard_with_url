@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import './shared.css';
 import UnitSubCompetencyTable from './UnitSubCompetencyTable';
 import * as XLSX from 'xlsx';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const SubCompetency = () => {
   const [units, setUnits] = useState([]);
@@ -13,6 +14,7 @@ const SubCompetency = () => {
   const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const competencies = [
     { name: 'Leadership', section_id: 85 },
@@ -22,23 +24,27 @@ const SubCompetency = () => {
   ];
 
   useEffect(() => {
+    console.log('Initializing component...');
     const fetchUnits = async () => {
       try {
-        const res = await fetch('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {
+        console.log('Fetching units...');
+        const res = await fetch(`${BASE_URL}/reportanalytics/getUnitList`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         });
         const data = await res.json();
+        console.log('Units response:', data);
 
         if (data?.status === 'success') {
           const allUnits = [...data.units.North, ...data.units.South];
           setUnits(allUnits);
+          console.log('✅ Units set:', allUnits);
         } else {
           setError('Failed to load units');
         }
       } catch (err) {
-        console.error('Error fetching units:', err);
+        console.error('❌ Error fetching units:', err);
         setError('Error loading units');
       }
     };
@@ -79,14 +85,23 @@ const SubCompetency = () => {
   };
 
   const handleApply = async () => {
+    console.log('📤 Applying filters...', {
+      selectedUnits,
+      selectedCompetency,
+    });
+
     if (!selectedCompetency || selectedUnits.length === 0) {
-      setError('Please select at least one unit and one competency.');
+      const msg = '❌ Please select at least one unit and one competency.';
+      console.warn(msg);
+      setError(msg);
       return;
     }
 
     const sectionObj = competencies.find((c) => c.name === selectedCompetency);
     if (!sectionObj) {
-      setError('Competency mapping not found!');
+      const msg = '❌ Competency mapping not found!';
+      console.error(msg);
+      setError(msg);
       return;
     }
 
@@ -94,7 +109,8 @@ const SubCompetency = () => {
     setError(null);
 
     try {
-      const res = await fetch('https://mhbodhi.medtalent.co/api/reportanalytics/getSubCometencyUserReport', {
+      console.log('🌐 Fetching report data from API...');
+      const res = await fetch(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -104,14 +120,18 @@ const SubCompetency = () => {
       });
 
       const responseData = await res.json();
+      console.log('📦 API response:', responseData);
 
       if (responseData?.status === 'success') {
+        console.log('✅ Report data received:', responseData.data);
         setReportData(responseData.data || responseData);
       } else {
-        setError(responseData?.error || 'Invalid data format received');
+        const msg = responseData?.error || '❌ Invalid data format received';
+        console.warn(msg);
+        setError(msg);
       }
     } catch (err) {
-      console.error('Error fetching report:', err);
+      console.error('❌ Error fetching report:', err);
       setError('Error fetching report data');
     } finally {
       setLoading(false);
@@ -156,6 +176,41 @@ const SubCompetency = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
     XLSX.writeFile(wb, 'SubCompetency_Report.xlsx');
   };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            unit: selectedUnits,
+            section_id: [selectedCompetency ? competencies.find(c => c.name === selectedCompetency).section_id : null],
+          }),
+        });
+        const result = await response.json();
+        setReportData(result);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [selectedUnits, selectedCompetency]);
+
+  if (isLoading) {
+    return (
+      <div className="table-container">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <div  className="loading-text">Loading data...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="performance-reports">
@@ -244,6 +299,7 @@ const SubCompetency = () => {
         <button className="clear-btn" onClick={handleClear}>
           <span className="icon"></span> Clear
         </button>
+
 
         <button className="excel-btn" onClick={exportToExcel}>
           <span className="icon"></span> Excel

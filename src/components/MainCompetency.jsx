@@ -17,6 +17,7 @@ const MainCompetency = () => {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
     fetchUnitList();
@@ -25,7 +26,7 @@ const MainCompetency = () => {
 
   const fetchUnitList = async () => {
     try {
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {});
+      const res = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {});
       if (res.data.status === 'success') {
         const allUnits = [...res.data.units.North, ...res.data.units.South];
         setUnits(allUnits);
@@ -37,7 +38,7 @@ const MainCompetency = () => {
 
   const fetchQuizList = async () => {
     try {
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getQuizList', {});
+      const res = await axios.post(`${BASE_URL}/reportanalytics/getQuizList`, {});
       if (Array.isArray(res.data)) {
         setQuizList(res.data);
       }
@@ -85,7 +86,7 @@ const MainCompetency = () => {
     try {
       setLoading(true);
       const response = await axios.post(
-        'https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetencyUnitReport',
+        `${BASE_URL}/reportanalytics/getMainCompetencyUnitReport`,
         requestBody
       );
 

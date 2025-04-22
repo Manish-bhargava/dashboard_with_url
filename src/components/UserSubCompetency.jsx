@@ -4,8 +4,10 @@ import './shared.css';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import UserSubCompetencyTable from './UserSubCompetencyTable';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 axios.defaults.withCredentials = true;
+
 //
 const UserSubCompetency = () => {
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -36,7 +38,7 @@ const UserSubCompetency = () => {
   const fetchUnitsFromAPI = async () => {
     try {
       setLoading(true);
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getUnitList', {});
+      const res = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {});
       if (res.data?.status === 'success') {
         const allUnits = [...res.data.units.North, ...res.data.units.South];
         setUnits(allUnits);
@@ -53,7 +55,7 @@ const UserSubCompetency = () => {
   const fetchCompetenciesFromAPI = async () => {
     try {
       setLoading(true);
-      const res = await axios.post('https://mhbodhi.medtalent.co/api/reportanalytics/getMainCompetency', {});
+      const res = await axios.post(`${BASE_URL}/reportanalytics/getMainCompetency`, {});         
       if (res.data?.status === 'success' && Array.isArray(res.data.data)) {
         const allSections = res.data.data.flatMap((entry) => entry.sections);
         const filteredCompetencies = allowedCompetencies.filter((comp) =>
@@ -68,7 +70,7 @@ const UserSubCompetency = () => {
     } finally {
       setLoading(false);
     }
-  };
+  };              
 
   const handleUnitSelect = (unit) => {
     setSelectedUnits((prev) =>
@@ -104,7 +106,7 @@ const UserSubCompetency = () => {
       setLoading(true);
       setError(null);
       const response = await axios.post(
-        'https://mhbodhi.medtalent.co/api/reportanalytics/getSubCometencyUnitReport',
+        `${BASE_URL}/reportanalytics/getSubCometencyUnitReport`,
         requestBody
       );
       console.log('Sub Competency Unit Report API Response:', response.data);
