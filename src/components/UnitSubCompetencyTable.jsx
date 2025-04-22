@@ -69,23 +69,23 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
     Object.entries(reportData).forEach(([unitName, users]) => {
       if (!users || typeof users !== 'object') return;
 
-      Object.entries(users).forEach(([userId, userData]) => {
-        const basic = userData.user_basic_detail || {};
-        const sectionDetails = userData.section_detail || {};
-        const topicMap = {};
+    Object.entries(users).forEach(([userId, userData]) => {
+      const basic = userData.user_basic_detail || {};
+      const sectionDetails = userData.section_detail || {};
+      const topicMap = {};
 
         Object.values(sectionDetails).forEach(section => {
-          const topics = section.topic_detail || {};
-          Object.entries(topics).forEach(([topicId, topic]) => {
-            if (topicIdToSubCompetencyMap[topicId]) {
-              topicMap[topicId] = {
+        const topics = section.topic_detail || {};
+        Object.entries(topics).forEach(([topicId, topic]) => {
+          if (topicIdToSubCompetencyMap[topicId]) {
+            topicMap[topicId] = {
                 score: topic.topic_total_score,
                 unitPercentile: topic.unit_topic_percentile_score,
                 mhPercentile: topic.topic_percentile_score
-              };
-            }
-          });
+            };
+          }
         });
+      });
 
         const totalScore = relevantTopics.reduce((acc, { topicId }) => {
           const raw = topicMap[topicId]?.score;
@@ -94,10 +94,10 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
         }, 0);
 
         rows.push({
-          sno: sno++,
-          studentName: basic.student_name || '-',
-          unit: basic.unit_name || unitName,
-          department: basic.department || '-',
+        sno: sno++,
+        studentName: basic.student_name || '-',
+        unit: basic.unit_name || unitName,
+        department: basic.department || '-',
           totalScore: totalScore ? totalScore.toFixed(2) : '-',
           topicMap
         });
@@ -251,10 +251,10 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
-      <div className="table-wrapper">
-        <table className="competency-table">
-          <thead>
-            <tr>
+    <div className="table-wrapper">
+      <table className="competency-table">
+        <thead>
+          <tr>
               <th>S.No</th>
               <th>Student Name</th>
               <th>Unit</th>
@@ -273,14 +273,14 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
                   <th>{name} Score ({calculateTotalScore(topicId)})</th>
                   <th>{name} Unit Percentile</th>
                   <th>{name} MH Percentile</th>
-                </React.Fragment>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+              </React.Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
             {sortedAndFilteredRows.map((row) => (
-              <tr key={row.sno}>
-                <td>{row.sno}</td>
+            <tr key={row.sno}>
+              <td>{row.sno}</td>
                 <td>{safeValue(row.studentName)}</td>
                 <td>{safeValue(row.unit)}</td>
                 <td>{safeValue(row.department)}</td>
@@ -292,10 +292,10 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
                     <td>{renderPercentileBar(row.topicMap[topicId]?.mhPercentile)}</td>
                   </React.Fragment>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       </div>
     </div>
   );

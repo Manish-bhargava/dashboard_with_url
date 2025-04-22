@@ -37,18 +37,19 @@ const UserSubCompetency = () => {
 
   const fetchUnitsFromAPI = async () => {
     try {
-      setLoading(true);
-      const res = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {});
-      if (res.data?.status === 'success') {
-        const allUnits = [...res.data.units.North, ...res.data.units.South];
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {}, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.data.status === 'success') {
+        // Combine all units from all regions dynamically
+        const allUnits = Object.values(response.data.units).flat();
         setUnits(allUnits);
       } else {
-        setError('Failed to load units. Please try again.');
+        setError('Failed to fetch units. Status not "success".');
       }
-    } catch (err) {
-      setError('Failed to load units. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('❌ Error fetching unit list:', error);
     }
   };
 

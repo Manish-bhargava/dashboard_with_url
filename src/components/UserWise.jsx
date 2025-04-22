@@ -49,7 +49,8 @@ const UserWise = () => {
       });
 
       if (response.data.status === 'success') {
-        const allUnits = [...response.data.units.North, ...response.data.units.South];
+        // Combine all units from all regions dynamically
+        const allUnits = Object.values(response.data.units).flat();
         setUnits(allUnits);
       } else {
         setError('Failed to fetch units. Status not "success".');

@@ -18,6 +18,7 @@ const MainCompetency = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchUnitList();
@@ -26,13 +27,19 @@ const MainCompetency = () => {
 
   const fetchUnitList = async () => {
     try {
-      const res = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {});
-      if (res.data.status === 'success') {
-        const allUnits = [...res.data.units.North, ...res.data.units.South];
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {}, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.data.status === 'success') {
+        // Combine all units from all regions dynamically
+        const allUnits = Object.values(response.data.units).flat();
         setUnits(allUnits);
+      } else {
+        setError('Failed to fetch units. Status not "success".');
       }
-    } catch (err) {
-      console.error('Error fetching unit list:', err);
+    } catch (error) {
+      console.error('❌ Error fetching unit list:', error);
     }
   };
 

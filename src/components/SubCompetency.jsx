@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import './shared.css';
 import UnitSubCompetencyTable from './UnitSubCompetencyTable';
 import * as XLSX from 'xlsx';
+import axios from 'axios';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const SubCompetency = () => {
@@ -23,33 +24,27 @@ const SubCompetency = () => {
     { name: 'Relationship Building', section_id: 84 },
   ];
 
+  const fetchUnitList = async () => {
+    try {
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getUnitList`, {}, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.data.status === 'success') {
+        // Combine all units from all regions dynamically
+        const allUnits = Object.values(response.data.units).flat();
+        setUnits(allUnits);
+      } else {
+        setError('Failed to fetch units. Status not "success".');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching unit list:', error);
+    }
+  };
+
   useEffect(() => {
     console.log('Initializing component...');
-    const fetchUnits = async () => {
-      try {
-        console.log('Fetching units...');
-        const res = await fetch(`${BASE_URL}/reportanalytics/getUnitList`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        const data = await res.json();
-        console.log('Units response:', data);
-
-        if (data?.status === 'success') {
-          const allUnits = [...data.units.North, ...data.units.South];
-          setUnits(allUnits);
-          console.log('✅ Units set:', allUnits);
-        } else {
-          setError('Failed to load units');
-        }
-      } catch (err) {
-        console.error('❌ Error fetching units:', err);
-        setError('Error loading units');
-      }
-    };
-
-    fetchUnits();
+    fetchUnitList();
   }, []);
 
   const handleUnitSelect = (unit) => {
