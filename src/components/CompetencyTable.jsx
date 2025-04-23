@@ -12,18 +12,55 @@ const CompetencyTable = ({ data }) => {
   const [sortOrder, setSortOrder] = useState('none'); // 'none', 'asc', 'desc'
   const [headerScores, setHeaderScores] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [studentMap, setStudentMap] = useState(new Map());
 
   useEffect(() => {
     if (data && typeof data === 'object') {
       const scores = {};
+      const newStudentMap = new Map();
 
       // Process all units to find the first valid score for each competency
       Object.entries(data).forEach(([unitId, unit]) => {
         const quizDetails = unit.quiz_detail || {};
         Object.entries(quizDetails).forEach(([quizId, quiz]) => {
-          Object.values(quiz).forEach(student => {
-            const sectionDetail = student.quiz_detail?.[quizId]?.section_detail || {};
+          Object.entries(quiz).forEach(([studentId, studentData]) => {
+            const userDetails = studentData.user_basic_detail || {};
+            const studentName = userDetails.student_name || '-';
+            const unitName = userDetails.unit_name || unitId;
+            const department = userDetails.department || '-';
+            const totalScore = studentData.total_score?.[quizId] || 0;
+            const leadershipInitialScore = studentData.leadership_initial_score || '-';
+
+            // Create or update student record
+            if (!newStudentMap.has(studentId)) {
+              newStudentMap.set(studentId, {
+                studentId,
+                studentName,
+                department,
+                leadershipInitialScore,
+                units: new Set([unitName]),
+                totalScore: parseFloat(totalScore) || 0,
+                sectionDetail: {}
+              });
+            } else {
+              const existingRecord = newStudentMap.get(studentId);
+              existingRecord.units.add(unitName);
+              existingRecord.totalScore = Math.max(existingRecord.totalScore, parseFloat(totalScore) || 0);
+            }
+
+            // Process section details
+            const sectionDetail = studentData.quiz_detail?.[quizId]?.section_detail || {};
+            const studentRecord = newStudentMap.get(studentId);
             Object.entries(sectionDetail).forEach(([sectionId, section]) => {
+              if (!studentRecord.sectionDetail[sectionId]) {
+                studentRecord.sectionDetail[sectionId] = {
+                  calculated_score: section.section_total_score || '-',
+                  section_percentile_score: section.section_percentile_score || '-',
+                  unit_section_percentile_score: section.unit_section_percentile_score || '-'
+                };
+              }
+
+              // Update header scores
               if (section.correct_marks && section.section_total_question) {
                 const calculatedScore = parseFloat(section.correct_marks) * parseFloat(section.section_total_question);
                 if (!scores[sectionId] || calculatedScore > parseFloat(scores[sectionId])) {
@@ -35,8 +72,8 @@ const CompetencyTable = ({ data }) => {
         });
       });
 
-      console.log("Calculated header scores:", scores);
       setHeaderScores(scores);
+      setStudentMap(newStudentMap);
     }
   }, [data]);
 
@@ -56,87 +93,26 @@ const CompetencyTable = ({ data }) => {
     );
   }
 
-  // Process data and create table rows
-  const processedData = Object.entries(data).map(([key, value]) => {
-    const quizDetails = value.quiz_detail || {};
-    const rows = [];
-
-    Object.entries(quizDetails).forEach(([quizId, studentMap]) => {
-      Object.entries(studentMap).forEach(([studentId, studentData]) => {
-        const userDetails = studentData.user_basic_detail || {};
-        const totalScore = studentData.total_score?.[quizId] || 0;
-        
-        const row = {
-          key: `${key}-${quizId}-${studentId}`,
-          studentName: userDetails.student_name || '-',
-          unitName: userDetails.unit_name || key,
-          department: userDetails.department || '-',
-          totalScore: parseFloat(totalScore) || 0,
-          sectionDetail: {}
-        };
-
-        // Process section details and show actual scores
-        const sectionDetail = studentData.quiz_detail?.[quizId]?.section_detail || {};
-        Object.entries(sectionDetail).forEach(([sectionId, section]) => {
-          row.sectionDetail[sectionId] = {
-            ...section,
-            calculated_score: section.section_total_score || '-',
-            section_percentile_score: section.section_percentile_score || '-',
-            unit_section_percentile_score: section.unit_section_percentile_score || '-'
-          };
-        });
-
-        rows.push(row);
-      });
-    });
-
-    return rows;
-  }).flat();
-
-  // Filter and sort data based on search term and sort order
-  const filteredAndSortedData = [...processedData]
+  // Convert Map to array and filter/sort
+  const processedData = Array.from(studentMap.values())
     .filter(item => {
       if (!searchTerm) return true;
       const searchLower = searchTerm.toLowerCase();
       return (
         item.studentName.toLowerCase().includes(searchLower) ||
-        item.unitName.toLowerCase().includes(searchLower) ||
+        Array.from(item.units).some(unit => unit.toLowerCase().includes(searchLower)) ||
         item.department.toLowerCase().includes(searchLower)
       );
     })
     .sort((a, b) => {
-      // First sort by search term match priority
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const aNameMatch = a.studentName.toLowerCase().includes(searchLower);
-        const bNameMatch = b.studentName.toLowerCase().includes(searchLower);
-        const aUnitMatch = a.unitName.toLowerCase().includes(searchLower);
-        const bUnitMatch = b.unitName.toLowerCase().includes(searchLower);
-        const aDeptMatch = a.department.toLowerCase().includes(searchLower);
-        const bDeptMatch = b.department.toLowerCase().includes(searchLower);
-
-        // Name matches come first
-        if (aNameMatch && !bNameMatch) return -1;
-        if (!aNameMatch && bNameMatch) return 1;
-        
-        // Then unit matches
-        if (aUnitMatch && !bUnitMatch) return -1;
-        if (!aUnitMatch && bUnitMatch) return 1;
-        
-        // Then department matches
-        if (aDeptMatch && !bDeptMatch) return -1;
-        if (!aDeptMatch && bDeptMatch) return 1;
-      }
-
-      // Then apply total score sorting if specified
       if (sortOrder === 'none') return 0;
       if (sortOrder === 'asc') return a.totalScore - b.totalScore;
       return b.totalScore - a.totalScore;
     });
 
-  // Get unique section names from all rows and map them to competency names
+  // Get unique section names from all rows
   const sectionNames = new Set();
-  filteredAndSortedData.forEach(row => {
+  processedData.forEach(row => {
     Object.keys(row.sectionDetail).forEach(sectionId => {
       if (competencyMap[sectionId]) {
         sectionNames.add(sectionId);
@@ -182,7 +158,7 @@ const CompetencyTable = ({ data }) => {
           <tr>
             <th>S.No</th>
             <th>Student Name</th>
-            <th>Unit</th>
+            <th>Units</th>
             <th>Department</th>
             <th 
               className="sortable-header"
@@ -199,22 +175,24 @@ const CompetencyTable = ({ data }) => {
               <React.Fragment key={sectionId}>
                 <th>{competencyMap[sectionId]} Score ({calculateTotalScore(sectionId)})</th>
                 <th>{competencyMap[sectionId]} MH Percentile</th>
+                <th>{competencyMap[sectionId]} Unit Percentile</th>
               </React.Fragment>
             ))}
           </tr>
         </thead>
         <tbody>
-          {filteredAndSortedData.map((row, index) => (
-            <tr key={row.key}>
+          {processedData.map((row, index) => (
+            <tr key={row.studentId}>
               <td>{index + 1}</td>
               <td>{row.studentName}</td>
-              <td>{row.unitName}</td>
+              <td>{Array.from(row.units).join(', ')}</td>
               <td>{row.department}</td>
               <td>{row.totalScore}</td>
               {Array.from(sectionNames).map(sectionId => (
                 <React.Fragment key={sectionId}>
                   <td>{row.sectionDetail[sectionId]?.calculated_score || '-'}</td>
                   <td>{renderPercentileBar(row.sectionDetail[sectionId]?.section_percentile_score || '-')}</td>
+                  <td>{renderPercentileBar(row.sectionDetail[sectionId]?.unit_section_percentile_score || '-')}</td>
                 </React.Fragment>
               ))}
             </tr>

@@ -49,8 +49,8 @@ const UserWise = () => {
       });
 
       if (response.data.status === 'success') {
-        // Combine all units from all regions dynamically
-        const allUnits = Object.values(response.data.units).flat();
+        // Combine all units from all regions dynamically and sort them
+        const allUnits = Object.values(response.data.units).flat().sort();
         setUnits(allUnits);
       } else {
         setError('Failed to fetch units. Status not "success".');
@@ -169,7 +169,7 @@ const UserWise = () => {
     }
 
     const data = reportData.data;
-    const rows = [];
+    const studentMap = new Map(); // To merge data for same student ID
 
     Object.entries(data).forEach(([unitKey, unitData]) => {
       const quizDetails = unitData.quiz_detail || {};
@@ -181,28 +181,47 @@ const UserWise = () => {
           const unitName = userDetails.unit_name || unitKey;
           const department = userDetails.department || '-';
           const totalScore = studentData.total_score?.[quizId] || '-';
+          const leadershipInitialScore = studentData.leadership_initial_score || '-';
 
           const quizData = studentData.quiz_detail?.[quizId];
           const sectionDetail = quizData?.section_detail || {};
 
-          const row = {
-            Student: studentName,
-            Unit: unitName,
-            Department: department,
-            'Total Score': totalScore,
-          };
+          // Create or update student record
+          if (!studentMap.has(studentId)) {
+            studentMap.set(studentId, {
+              'Student ID': studentId,
+              'Student Name': studentName,
+              'Department': department,
+              'Leadership Initial Score': leadershipInitialScore,
+              'Units': new Set([unitName]),
+              'Scores': {}
+            });
+          } else {
+            const existingRecord = studentMap.get(studentId);
+            existingRecord.Units.add(unitName);
+          }
 
+          // Add competency scores
+          const studentRecord = studentMap.get(studentId);
           Object.values(sectionDetail).forEach((section) => {
             const sectionName = section.section_name;
-            row[`${sectionName} Score`] = section.section_total_score;
-            row[`${sectionName} MH %ile`] = section.section_percentile_score;
-            row[`${sectionName} Unit %ile`] = section.unit_section_percentile_score;
+            studentRecord.Scores[`${sectionName} Score`] = section.section_total_score;
+            studentRecord.Scores[`${sectionName} MH %ile`] = section.section_percentile_score;
+            studentRecord.Scores[`${sectionName} Unit %ile`] = section.unit_section_percentile_score;
           });
-
-          rows.push(row);
         });
       });
     });
+
+    // Convert Map to array and format for Excel
+    const rows = Array.from(studentMap.values()).map(record => ({
+      'Student ID': record['Student ID'],
+      'Student Name': record['Student Name'],
+      'Department': record['Department'],
+      'Leadership Initial Score': record['Leadership Initial Score'],
+      'Units': Array.from(record.Units).join(', '),
+      ...record.Scores
+    }));
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
