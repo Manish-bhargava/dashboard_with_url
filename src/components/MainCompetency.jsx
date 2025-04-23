@@ -19,6 +19,7 @@ const MainCompetency = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [error, setError] = useState(null);
+  
 
   useEffect(() => {
     fetchUnitList();
@@ -32,8 +33,8 @@ const MainCompetency = () => {
       });
 
       if (response.data.status === 'success') {
-        // Combine all units from all regions dynamically
-        const allUnits = Object.values(response.data.units).flat();
+        // Combine all units from all regions dynamically and sort them
+        const allUnits = Object.values(response.data.units).flat().sort();
         setUnits(allUnits);
       } else {
         setError('Failed to fetch units. Status not "success".');

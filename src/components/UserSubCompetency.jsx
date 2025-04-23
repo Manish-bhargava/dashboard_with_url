@@ -42,8 +42,8 @@ const UserSubCompetency = () => {
       });
 
       if (response.data.status === 'success') {
-        // Combine all units from all regions dynamically
-        const allUnits = Object.values(response.data.units).flat();
+        // Combine all units from all regions dynamically and sort them
+        const allUnits = Object.values(response.data.units).flat().sort();
         setUnits(allUnits);
       } else {
         setError('Failed to fetch units. Status not "success".');
