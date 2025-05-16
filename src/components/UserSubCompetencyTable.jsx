@@ -1,0 +1,434 @@
+import React, { useState } from 'react';
+import './CompetencyTable.css';
+
+const topicIdToSubCompetencyMap = {
+  14: ['Situational Awareness', 'Situation Management'],
+  15: ['Swiftness/Timeliness of Response', 'Situation Management'],
+  16: ['Emotional Balance', 'Situation Management'],
+  17: ['Stress Handling Capacity', 'Situation Management'],
+
+  3: ['Communication', 'Relationship Building'],
+  4: ['Team work/Collaboration', 'Relationship Building'],
+  7: ['People Handling', 'Relationship Building'],
+  8: ['Openness to Change', 'Relationship Building'],
+  9: ['Accepting Suggestions/Criticism', 'Relationship Building'],
+  10: ['High Tolerance Levels', 'Relationship Building'],
+
+  5: ['Work Ethic', 'Quality in Healthcare Delivery'],
+  6: ['Empathy', 'Quality in Healthcare Delivery'],
+  11: ['Assertiveness', 'Quality in Healthcare Delivery'],
+  12: ['Critical Thinking', 'Quality in Healthcare Delivery'],
+  13: ['Willingness to Learn', 'Quality in Healthcare Delivery'],
+
+  18: ['Mentoring', 'Leadership'],
+  19: ['Taking Initiative', 'Leadership'],
+  20: ['Conflict Management', 'Leadership'],
+  21: ['Ambition', 'Leadership'],
+};
+
+// Generate abbreviation from competency name
+const getAbbreviation = (topicName) => {
+  // Split topic name by spaces or forward slashes
+  const words = topicName.split(/[ \/]+/);
+  // Create abbreviation from first letter of each word
+  return words.map(word => word.charAt(0).toUpperCase()).join('');
+};
+
+// Create abbreviation map for topics
+const topicAbbreviations = {};
+Object.entries(topicIdToSubCompetencyMap).forEach(([id, [name]]) => {
+  topicAbbreviations[id] = getAbbreviation(name);
+});
+
+const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState({
+    key: null,
+    direction: 'none' // 'none', 'asc', 'desc'
+  });
+  
+  const reportData = data?.data || data;
+
+  console.log('Initial Data:', data);
+  console.log('Current Sort Config:', sortConfig);
+
+  if (isLoading) {
+    return (
+      <div className="table-container">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <div className="loading-text">Loading data...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!reportData || typeof reportData !== 'object') {
+    return <div className="no-data">No data available for selected filters.</div>;
+  }
+
+  const relevantTopics = Object.entries(topicIdToSubCompetencyMap)
+    .filter(([, [, comp]]) => comp === selectedCompetency)
+    .map(([topicId, [name]]) => ({ topicId, name }));
+
+  console.log('Selected Competency:', selectedCompetency);
+  console.log('Relevant Topics:', relevantTopics);
+
+  const unitMap = {};
+  let sno = 1;
+
+  const renderPercentileBar = (value) => {
+    if (!value || value === '-') return '-';
+    const percentage = parseFloat(value);
+    if (isNaN(percentage)) return '-';
+    
+    return (
+      <div className="percentile-cell-container">
+        <div className="mini-percentile-bar">
+          <div 
+            className="mini-percentile-fill" 
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <span className="percentile-value">{percentage.toFixed(2)}</span>
+      </div>
+    );
+  };
+
+  Object.entries(reportData).forEach(([unitName, sections]) => {
+    console.log('Processing Unit:', unitName);
+    const topicStats = {};
+
+    Object.values(sections).forEach((section) => {
+      console.log('Processing Section:', section);
+      const topics = section.topic_detail || {};
+      Object.entries(topics).forEach(([topicId, topic]) => {
+        // Debug log for all topics
+        console.log('Topic Data:', {
+          topicId,
+          topicName: topicIdToSubCompetencyMap[topicId]?.[0],
+          competency: topicIdToSubCompetencyMap[topicId]?.[1],
+          selectedCompetency,
+          topicData: topic
+        });
+
+        if (topicIdToSubCompetencyMap[topicId] && topicIdToSubCompetencyMap[topicId][1] === selectedCompetency) {
+          if (!topicStats[topicId]) {
+            topicStats[topicId] = {
+              scoreSum: 0,
+              mhPercentileSum: 0,
+              count: 0,
+            };
+          }
+
+          // Debug log for communication
+          if (topicIdToSubCompetencyMap[topicId][0] === 'Communication') {
+            console.log('Communication Topic Data:', {
+              topicId,
+              topic,
+              rawScore: topic.unit_topic_score_average,
+              rawMhPercentile: topic.unit_topic_score_percentile,
+              parsedScore: parseFloat(topic.unit_topic_score_average),
+              parsedMhPercentile: parseFloat(topic.unit_topic_score_percentile)
+            });
+          }
+
+          const score = parseFloat(topic.unit_topic_score_average || 0);
+          const mhPercentile = parseFloat(topic.unit_topic_score_percentile || 0);
+
+          topicStats[topicId].scoreSum += isNaN(score) ? 0 : score;
+          topicStats[topicId].mhPercentileSum += isNaN(mhPercentile) ? 0 : mhPercentile;
+          topicStats[topicId].count += 1;
+        }
+      });
+    });
+
+    // Debug log for topic stats
+    console.log('Topic Stats for Unit:', {
+      unitName,
+      topicStats
+    });
+
+    const subCompetencyData = relevantTopics.map(({ topicId, name }) => {
+      const stats = topicStats[topicId];
+      if (!stats || stats.count === 0) {
+        console.log('No stats found for:', { topicId, name });
+        return { name, unitAvgScore: '-', mhPercentile: '-' };
+      }
+      const unitAvgScore = (stats.scoreSum / stats.count).toFixed(2);
+      const mhPercentile = (stats.mhPercentileSum / stats.count).toFixed(2);
+      
+      // Debug log for final calculations
+      console.log('Final Calculations:', {
+        topicId,
+        name,
+        stats,
+        unitAvgScore,
+        mhPercentile
+      });
+      
+      return { name, unitAvgScore, mhPercentile };
+    });
+
+    unitMap[unitName] = {
+      sno: sno++,
+      unitName,
+      subCompetencyStats: subCompetencyData,
+    };
+  });
+
+  const safe = (val) => (val === null || val === undefined || val === '' ? '-' : val);
+
+  const getSortableValue = (row, key) => {
+    console.log('Getting sortable value for:', { row, key });
+    
+    // Handle basic fields
+    if (key === 'sno') {
+      const value = row.sno;
+      console.log('S.No value:', value);
+      return value;
+    }
+    if (key === 'unitName') {
+      const value = row.unitName?.toLowerCase() || '';
+      console.log('Unit Name value:', value);
+      return value;
+    }
+    
+    // Handle competency scores and percentiles
+    const match = key.match(/(.+)_(score|percentile)$/);
+    if (match) {
+      const competencyName = match[1];
+      const isPercentile = match[2] === 'percentile';
+      
+      console.log('Looking for competency:', {
+        competencyName,
+        isPercentile,
+        subCompetencyStats: row.subCompetencyStats
+      });
+
+      // Find the matching competency in subCompetencyStats
+      const competencyData = row.subCompetencyStats.find(stat => stat.name === competencyName);
+      if (!competencyData) {
+        console.log('No matching competency found:', competencyName);
+        return 0;
+      }
+
+      const value = isPercentile ? 
+        (competencyData.mhPercentile === '-' ? 0 : parseFloat(competencyData.mhPercentile) || 0) :
+        (competencyData.unitAvgScore === '-' ? 0 : parseFloat(competencyData.unitAvgScore) || 0);
+
+      console.log('Competency value:', {
+        competencyName,
+        isPercentile,
+        rawValue: isPercentile ? competencyData.mhPercentile : competencyData.unitAvgScore,
+        parsedValue: value
+      });
+      return value;
+    }
+
+    console.log('No matching sort key found, returning 0');
+    return 0;
+  };
+
+  const handleSort = (key) => {
+    console.log('Sort clicked for key:', key);
+    setSortConfig(prev => {
+      const newConfig = {
+        key: prev.key === key && prev.direction === 'desc' ? null : key,
+        direction: prev.key === key ? 
+          (prev.direction === 'none' ? 'asc' : 
+           prev.direction === 'asc' ? 'desc' : 'none') : 
+          'asc'
+      };
+      console.log('New sort config:', newConfig);
+      return newConfig;
+    });
+  };
+
+  const getSortIcon = (key) => {
+    const icon = sortConfig.key !== key ? '↕️' :
+                sortConfig.direction === 'asc' ? '↑' :
+                sortConfig.direction === 'desc' ? '↓' : '↕️';
+    console.log('Sort icon for', key, ':', icon);
+    return icon;
+  };
+
+  // Process and sort data
+  const processedAndSortedData = [...Object.values(unitMap)].map((item, index) => ({
+    ...item,
+    sno: index + 1
+  }));
+
+  console.log('Processed Data:', processedAndSortedData);
+
+  // Filter data based on search term
+  const filteredData = processedAndSortedData.filter(item => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    const matches = item.unitName?.toLowerCase().includes(searchLower);
+    console.log('Search filter:', { unitName: item.unitName, searchTerm, matches });
+    return matches;
+  });
+
+  console.log('Filtered Data:', filteredData);
+
+  // Sort the filtered data
+  const sortedData = [...filteredData].sort((a, b) => {
+    if (sortConfig.direction === 'none') {
+      console.log('No sorting direction, returning 0');
+      return 0;
+    }
+
+    const aValue = getSortableValue(a, sortConfig.key);
+    const bValue = getSortableValue(b, sortConfig.key);
+
+    console.log('Sorting values:', {
+      key: sortConfig.key,
+      direction: sortConfig.direction,
+      aValue,
+      bValue
+    });
+
+    // Handle string comparison for text fields
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      const result = sortConfig.direction === 'asc' ? 
+        aValue.localeCompare(bValue) : 
+        bValue.localeCompare(aValue);
+      console.log('String comparison result:', result);
+      return result;
+    }
+
+    // Handle numeric comparison for scores and percentiles
+    const result = sortConfig.direction === 'asc' ? 
+      aValue - bValue : 
+      bValue - aValue;
+    console.log('Numeric comparison result:', result);
+    return result;
+  });
+
+  console.log('Final Sorted Data:', sortedData);
+
+  const calculateTotalScore = (topicId) => {
+    // Find the section that contains this topic
+    const section = Object.values(reportData).find(unit => 
+      Object.values(unit).find(section => {
+        const topic = section.topic_detail?.[topicId];
+        return topic && section.section_detail;
+      })
+    );
+
+    if (!section) return 0;
+
+    // Get the first section that contains the topic
+    const sectionData = Object.values(section).find(s => 
+      s.topic_detail?.[topicId] && s.section_detail
+    );
+
+    if (!sectionData) return 0;
+
+    const topic = sectionData.topic_detail[topicId];
+    const correctMarks = parseFloat(sectionData.section_detail.correct_marks || 0);
+    const totalQuestions = parseFloat(topic.topic_total_question || 0);
+
+    return (totalQuestions * correctMarks).toFixed(1);
+  };
+
+  return (
+    <div className="table-container">
+      <div className="search-container">
+        <input
+          type="text"
+          placeholder="Search by unit..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+      </div>
+      
+      {/* Legend for abbreviations */}
+      <div className="competency-legend">
+        <p><strong>Legend:</strong></p>
+        <ul className="legend-list">
+          {relevantTopics.map(({ topicId, name }) => (
+            <li key={topicId}><strong>{topicAbbreviations[topicId]}</strong> - {name}</li>
+          ))}
+        </ul>
+      </div>
+      <table className="competency-table">
+        <thead>
+          <tr>
+            <th 
+              className="sortable-header"
+              onClick={() => handleSort('sno')}
+            >
+              S.No
+              <span className="sort-arrows">
+                {getSortIcon('sno')}
+              </span>
+            </th>
+            <th 
+              className="sortable-header"
+              onClick={() => handleSort('unitName')}
+            >
+              Unit
+              <span className="sort-arrows">
+                {getSortIcon('unitName')}
+              </span>
+            </th>
+            {relevantTopics.map(({ topicId, name }) => {
+              const abbr = topicAbbreviations[topicId];
+              return (
+                <React.Fragment key={name}>
+                  <th 
+                    className="sortable-header"
+                    onClick={() => handleSort(`${name}_score`)}
+                  >
+                    {abbr} - Avg Score (Out of {calculateTotalScore(topicId)})
+                    <span className="sort-arrows">
+                      {getSortIcon(`${name}_score`)}
+                    </span>
+                  </th>
+                  <th 
+                    className="sortable-header mh-percentile"
+                    onClick={() => handleSort(`${name}_percentile`)}
+                  >
+                    {abbr} - MH %ile
+                    <span className="sort-arrows">
+                      {getSortIcon(`${name}_percentile`)}
+                    </span>
+                  </th>
+                </React.Fragment>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedData.length === 0 ? (
+            <tr>
+              <td colSpan={2 + relevantTopics.length * 2}>
+                No data available for the search term '{searchTerm}'
+              </td>
+            </tr>
+          ) : (
+            sortedData.map((row) => (
+              <tr key={row.sno}>
+                <td>{row.sno}</td>
+                <td>{row.unitName}</td>
+                {row.subCompetencyStats.map((stat) => (
+                  <React.Fragment key={stat.name}>
+                    <td>{safe(stat.unitAvgScore)}</td>
+                    <td className="mh-percentile">
+                      {renderPercentileBar(stat.mhPercentile)}
+                    </td>
+                  </React.Fragment>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default UserSubCompetencyTable;
