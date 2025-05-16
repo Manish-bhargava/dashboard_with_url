@@ -115,7 +115,8 @@ const SubCompetency = () => {
     }
   };
 
-  const fetchData = async () => {
+  // Initialize dropdown options but don't fetch report data
+  const initializeDropdowns = async () => {
     try {
       await Promise.all([
         fetchUnitList(),
@@ -123,14 +124,15 @@ const SubCompetency = () => {
       ]);
       setIsLoading(false);
     } catch (error) {
-      console.error('❌ Error in fetchData:', error);
+      console.error('❌ Error initializing dropdowns:', error);
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    console.log('Loading data...');
-    fetchData();
+    console.log('Initializing component...');
+    // Only load dropdown data, not report data
+    initializeDropdowns();
     
     // Add a global click handler to close dropdowns when clicking outside
     const handleClickOutside = (event) => {
@@ -280,30 +282,6 @@ const SubCompetency = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
     XLSX.writeFile(wb, 'SubCompetency_Report.xlsx');
   };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            unit: selectedUnits,
-            section_id: [selectedCompetency ? competencies.find(c => c.name === selectedCompetency).section_id : null],
-          }),
-        });
-        const result = await response.json();
-        setReportData(result);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [selectedUnits, selectedCompetency]);
 
   if (isLoading) {
     return (

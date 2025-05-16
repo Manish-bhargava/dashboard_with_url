@@ -7,7 +7,8 @@ import { ClipLoader } from 'react-spinners'; // Import spinner component (if usi
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const UserWise = () => {
   const [selectedUnits, setSelectedUnits] = useState([]);
-  const [selectedTest, setSelectedTest] = useState(''); // Changed from array to string for single select
+  const [selectedTest, setSelectedTest] = useState(''); // Quiz name for display
+  const [selectedQuizId, setSelectedQuizId] = useState(''); // Actual quiz ID for API call
   const [showUnitsDropdown, setShowUnitsDropdown] = useState(false);
   const [showTestsDropdown, setShowTestsDropdown] = useState(false);
   const [units, setUnits] = useState([]);
@@ -103,30 +104,22 @@ const UserWise = () => {
   };
 
   const handleApplyFilters = async () => {
-    if (selectedUnits.length === 0 || !selectedTest) { // Changed selectedTests.length to !selectedTest
+    if (selectedUnits.length === 0 || !selectedQuizId) {
       setError('Please select unit(s) and a test before applying filters.');
       setReportData(null); // Clear data if selections are invalid
       return;
     }
 
     console.log("✅ Selected Units:", selectedUnits);
+    console.log("✅ Selected Quiz ID:", selectedQuizId);
     console.log("✅ Selected Test:", selectedTest); // Changed log key
-
-    const quiz = quizList.find(q => q.quiz_name === selectedTest);
-    const selectedQuizId = quiz ? quiz.quiz_id : null;
-
-    if (!selectedQuizId) {
-      setError('Invalid test selection: Could not find ID for the selected test.');
-      setReportData(null); // Clear data if quiz selection is invalid
-      return;
-    }
 
     const requestBody = {
       unit: selectedUnits,
-      quiz_id: [selectedQuizId] // API might expect an array, even for single select
+      quiz_id: [selectedQuizId] // API expects an array
     };
-
-    console.log("📦 Request Body:", requestBody);
+    
+    console.log('🔍 Request Body:', requestBody);
 
     setError(null); // Clear previous errors before new request
     setReportData(null); // Clear previous data before new request
@@ -160,9 +153,11 @@ const UserWise = () => {
     }
   };
 
-  const handleTestSelect = (testName) => {
-    setSelectedTest(testName);
-    setShowTestsDropdown(false); // Close dropdown on selection
+  const handleTestSelect = (quiz) => {
+    setSelectedTest(quiz.quiz_name);
+    setSelectedQuizId(quiz.quiz_id);
+    setShowTestsDropdown(false);
+    console.log(`Selected quiz: ${quiz.quiz_name} (ID: ${quiz.quiz_id})`);
   };
 
   const toggleSelectAllUnits = () => {
@@ -173,11 +168,10 @@ const UserWise = () => {
     }
   };
 
-  // Remnants of toggleSelectAllTests logic removed
-
   const handleClear = () => {
     setSelectedUnits([]);
-    setSelectedTest(''); // Reset to empty string for single select test
+    setSelectedTest('');
+    setSelectedQuizId('');
     setReportData(null);
   };
 
@@ -361,7 +355,7 @@ const UserWise = () => {
                   <div 
                     key={quiz.quiz_id} 
                     className={`dropdown-item ${selectedTest === quiz.quiz_name ? 'selected' : ''}`}
-                    onClick={() => handleTestSelect(quiz.quiz_name)}
+                    onClick={() => handleTestSelect(quiz)}
                   >
                     <span className="select-circle"></span>
                     {quiz.quiz_name}

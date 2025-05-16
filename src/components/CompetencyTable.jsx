@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './CompetencyTable.css';
 
-const competencyMap = {
+// Full competency map for reference
+const fullCompetencyMap = {
   "85": "Leadership",
   "83": "Quality in Healthcare Delivery",
   "84": "Relationship Building",
@@ -16,22 +17,24 @@ const getAbbreviation = (sectionName) => {
   return words.map(word => word.charAt(0).toUpperCase()).join('');
 };
 
-// Create abbreviation map
-const competencyAbbreviations = {};
-Object.entries(competencyMap).forEach(([id, name]) => {
-  competencyAbbreviations[id] = getAbbreviation(name);
+// Initial abbreviation map will be updated later
+const initialCompetencyAbbreviations = {};
+Object.entries(fullCompetencyMap).forEach(([id, name]) => {
+  initialCompetencyAbbreviations[id] = getAbbreviation(name);
 });
 
-const CompetencyTable = ({ data }) => {
+const CompetencyTable = ({ data, searchTerm = '' }) => {
   const [sortOrder, setSortOrder] = useState('none'); // 'none', 'asc', 'desc'
   const [headerScores, setHeaderScores] = useState({});
-  const [searchTerm, setSearchTerm] = useState('');
   const [studentMap, setStudentMap] = useState(new Map());
+  const [activeCompetencyMap, setActiveCompetencyMap] = useState({});
+  const [quizSpecificSections, setQuizSpecificSections] = useState(new Set());
 
   useEffect(() => {
     if (data && typeof data === 'object') {
       const scores = {};
       const newStudentMap = new Map();
+      const sectionsInSelectedQuiz = new Set();
 
       // Process all units to find the first valid score for each competency
       Object.entries(data).forEach(([unitId, unit]) => {
@@ -66,6 +69,9 @@ const CompetencyTable = ({ data }) => {
             const sectionDetail = studentData.quiz_detail?.[quizId]?.section_detail || {};
             const studentRecord = newStudentMap.get(studentId);
             Object.entries(sectionDetail).forEach(([sectionId, section]) => {
+              // Track which sections are in the selected quiz
+              sectionsInSelectedQuiz.add(sectionId);
+              
               if (!studentRecord.sectionDetail[sectionId]) {
                 studentRecord.sectionDetail[sectionId] = {
                   calculated_score: section.section_total_score || '-',
@@ -86,10 +92,30 @@ const CompetencyTable = ({ data }) => {
         });
       });
 
+      // Create a quiz-specific competency map
+      const filteredCompetencyMap = {};
+      sectionsInSelectedQuiz.forEach(sectionId => {
+        if (fullCompetencyMap[sectionId]) {
+          filteredCompetencyMap[sectionId] = fullCompetencyMap[sectionId];
+        }
+      });
+      
+      console.log('Quiz-specific sections:', Array.from(sectionsInSelectedQuiz));
+      console.log('Filtered competency map:', filteredCompetencyMap);
+      
+      // Set the active competency map to only include sections from this quiz
+      setActiveCompetencyMap(filteredCompetencyMap);
+      setQuizSpecificSections(sectionsInSelectedQuiz);
       setHeaderScores(scores);
       setStudentMap(newStudentMap);
     }
   }, [data]);
+  
+  // Build abbreviations from active competency map
+  const competencyAbbreviations = {};
+  Object.entries(activeCompetencyMap).forEach(([id, name]) => {
+    competencyAbbreviations[id] = getAbbreviation(name);
+  });
 
   const handleSort = () => {
     setSortOrder(prev => {
@@ -124,11 +150,11 @@ const CompetencyTable = ({ data }) => {
       return b.totalScore - a.totalScore;
     });
 
-  // Get unique section names from all rows
+  // Only include sections that are in the selected quiz
   const sectionNames = new Set();
   processedData.forEach(row => {
     Object.keys(row.sectionDetail).forEach(sectionId => {
-      if (competencyMap[sectionId]) {
+      if (activeCompetencyMap[sectionId] && quizSpecificSections.has(sectionId)) {
         sectionNames.add(sectionId);
       }
     });
@@ -163,7 +189,7 @@ const CompetencyTable = ({ data }) => {
           type="text"
           placeholder="Search by name, unit, or department..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          readOnly
           className="search-input"
         />
       </div>
@@ -172,7 +198,7 @@ const CompetencyTable = ({ data }) => {
       <div className="competency-legend">
         <p><strong>Legend:</strong></p>
         <ul className="legend-list">
-          {Object.entries(competencyMap).map(([id, name]) => (
+          {Object.entries(activeCompetencyMap).map(([id, name]) => (
             <li key={id}><strong>{competencyAbbreviations[id]}</strong> - {name}</li>
           ))}
         </ul>
@@ -196,7 +222,7 @@ const CompetencyTable = ({ data }) => {
               </span>
             </th>
             {Array.from(sectionNames).map(sectionId => {
-              const abbr = competencyAbbreviations[sectionId];
+              const abbr = competencyAbbreviations[sectionId] || getAbbreviation(fullCompetencyMap[sectionId] || 'Unknown');
               return (
                 <React.Fragment key={sectionId}>
                   <th>{abbr} - Score ({calculateTotalScore(sectionId)})</th>

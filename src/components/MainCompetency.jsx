@@ -261,7 +261,11 @@ const MainCompetency = () => {
           </div>
         ) : reportData ? (
           <div className="results-content">
-            <CompetencyMainTable data={reportData} />
+            <CompetencyMainTable 
+              units={selectedUnits} 
+              quizId={selectedTest ? quizList.find(q => q.quiz_name === selectedTest)?.quiz_id : null}
+              reportData={reportData}
+            />
           </div>
         ) : (
           <div className="no-filters-message">

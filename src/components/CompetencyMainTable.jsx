@@ -1,19 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import './CompetencyTable.css';
 
-const competencyMap = {
-  "85": "Leadership",
-  "83": "Quality in Healthcare Delivery",
-  "84": "Relationship Building",
-  "82": "Situation Management"
-};
-
-const competencyValues = {
-  "85": "36",
-  "83": "48",
-  "84": "54",
-  "82": "42"
-};
+// Will be populated from API
+const initialCompetencyMap = {};
+const initialCompetencyValues = {};
 
 // Generate abbreviation from competency name
 const getAbbreviation = (sectionName) => {
@@ -23,13 +14,42 @@ const getAbbreviation = (sectionName) => {
   return words.map(word => word.charAt(0).toUpperCase()).join('');
 };
 
-// Create abbreviation map
-const competencyAbbreviations = {};
-Object.entries(competencyMap).forEach(([id, name]) => {
-  competencyAbbreviations[id] = getAbbreviation(name);
-});
+// fall back data in case API fails
+const fallbackCompetencyMap = {
+  "85": "Leadership",
+  "83": "Quality in Healthcare Delivery",
+  "84": "Relationship Building",
+  "82": "Situation Management"
+};
 
-const CompetencyMainTable = ({ data, isLoading }) => {
+const fallbackCompetencyValues = {
+  "85": "36",
+  "83": "48",
+  "84": "54",
+  "82": "42"
+};
+
+/**
+ * CompetencyMainTable Component
+ * 
+ * Displays a table of competency metrics by unit, dynamically adjusting columns
+ * based on the quiz selections. Uses an API to fetch competency definitions
+ * and receives report data as props from parent component.
+ * 
+ * @param {Array} units - Selected units to display in the table
+ * @param {number} quizId - The ID of the selected quiz/test
+ * @param {Object} reportData - The API response data containing unit scores
+ */
+const CompetencyMainTable = ({ units, quizId, reportData: propReportData }) => {
+  // State to manage competency data fetched from API
+  const [competencyMap, setCompetencyMap] = useState(fallbackCompetencyMap); // Use fallback data as initial state
+  const [competencyValues, setCompetencyValues] = useState(fallbackCompetencyValues); // Use fallback data as initial state
+  const [competencyAbbreviations, setCompetencyAbbreviations] = useState({});
+  const [apiDataLoaded, setApiDataLoaded] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [reportData, setReportData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
   // State to store active competencies from the current data
   const [activeCompetencies, setActiveCompetencies] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,63 +134,281 @@ const CompetencyMainTable = ({ data, isLoading }) => {
     return icon;
   };
 
+  // Initialize abbreviations for the fallback data
   useEffect(() => {
-    if (data && data.status === 'success' && data.data) {
-      console.log('Raw Data:', data.data); // Debug log
+    // Create abbreviation map for fallback data
+    const initialAbbreviations = {};
+    Object.entries(fallbackCompetencyMap).forEach(([id, name]) => {
+      initialAbbreviations[id] = getAbbreviation(name);
+    });
+    setCompetencyAbbreviations(initialAbbreviations);
+    console.log('Created abbreviations for fallback data:', initialAbbreviations);
+  }, []);
+
+  // Fetch competency mapping information from API
+  useEffect(() => {
+    const fetchCompetencyData = async () => {
+      try {
+        console.log('Fetching competency definitions...');
+        // Use axios with the proxy configured in vite.config.js
+        const response = await axios.post('/api/reportanalytics/getSubCompetency', {});
+        
+        const responseData = response.data;
+        
+        if (responseData.status === 'success' && Array.isArray(responseData.data)) {
+          console.log('Competency Definition API Data:', responseData.data);
+          
+          // Build competency map and values from API data
+          const newCompetencyMap = {};
+          const newCompetencyValues = {};
+          
+          responseData.data.forEach(section => {
+            console.log('Processing section:', section.section_name, 'with quiz_section_id:', section.quiz_section_id);
+            
+            // Each section has quiz_section_id which is an array with 2 values
+            // We'll use the second value as our section ID (e.g., "84")
+            if (section.quiz_section_id && section.quiz_section_id.length > 1) {
+              const sectionId = section.quiz_section_id[1];
+              newCompetencyMap[sectionId] = section.section_name;
+              console.log(`Added to map: ${sectionId} -> ${section.section_name}`);
+              
+              // Calculate total marks for each section
+              let totalMarks = 0;
+              if (section.topics && Array.isArray(section.topics)) {
+                section.topics.forEach(topic => {
+                  if (topic.total_marks) {
+                    totalMarks += parseInt(topic.total_marks, 10);
+                  }
+                });
+              }
+              newCompetencyValues[sectionId] = totalMarks.toString();
+              console.log(`Total marks for ${section.section_name}: ${totalMarks}`);
+            }
+          });
+          
+          // If API competency map is empty, continue using fallback data
+          if (Object.keys(newCompetencyMap).length === 0) {
+            console.log('API competency data is empty, using fallback data');
+            setApiDataLoaded(true);
+            return;
+          }
+          
+          // Create abbreviation map
+          const newCompetencyAbbreviations = {};
+          Object.entries(newCompetencyMap).forEach(([id, name]) => {
+            newCompetencyAbbreviations[id] = getAbbreviation(name);
+          });
+          
+          console.log('Generated Competency Map:', newCompetencyMap);
+          console.log('Generated Competency Values:', newCompetencyValues);
+          console.log('Generated Abbreviations:', newCompetencyAbbreviations);
+          
+          setCompetencyMap(newCompetencyMap);
+          setCompetencyValues(newCompetencyValues);
+          setCompetencyAbbreviations(newCompetencyAbbreviations);
+          setApiDataLoaded(true);
+        } else {
+          throw new Error('Invalid API response format for competency definitions');
+        }
+      } catch (error) {
+        console.error('Error fetching competency definitions:', error);
+        setApiError(error.message);
+        
+        // If there's an error, still set API data loaded and use fallback data
+        setApiDataLoaded(true);
+      }
+    };
+    
+    fetchCompetencyData();
+  }, []);
+  
+  // Set report data from props when it changes
+  useEffect(() => {
+    if (propReportData) {
+      console.log('Received report data from props:', propReportData);
+      setReportData(propReportData);
+      setIsLoading(false);
+    }
+  }, [propReportData]);
+
+  // Track if we've already filtered the competency map
+  const [isFiltered, setIsFiltered] = useState(false);
+  
+  // Process table data when reportData and competency map are loaded or sort changes
+  useEffect(() => {
+    if (apiDataLoaded && reportData && reportData.status === 'success' && reportData.data) {
+      console.log('Starting to process data in second useEffect...');
+      console.log('Raw Report Data:', reportData.data);
+      console.log('Current competencyMap:', competencyMap);
+      console.log('Competency map keys available:', Object.keys(competencyMap));
+      
+      // We should have a competency map either from API or fallback data
+      if (Object.keys(competencyMap).length === 0) {
+        console.log('WARNING: Competency map is still empty despite fallback. Using emergency hardcoded values.');
+        // Emergency fallback - hardcode values directly into processing step
+        const emergencyMap = {
+          "85": "Leadership",
+          "83": "Quality in Healthcare Delivery",
+          "84": "Relationship Building",
+          "82": "Situation Management"
+        };
+        setCompetencyMap(emergencyMap);
+        return;
+      }
+      
+      // Only filter the competency map once to avoid infinite loops
+      if (!isFiltered) {
+        console.log('Filtering competency map for quiz_id:', quizId);
+        
+        // Instead of using the full competency map, filter it to only show sections that are
+        // specific to the selected quiz_id
+        const filteredCompetencyMap = {};
+        
+        // Loop through the report data (which may have multiple units)
+        Object.entries(reportData.data).forEach(([unitName, unitData]) => {
+          console.log(`Processing unit: ${unitName} for quiz_id: ${quizId}`);
+          
+          // Get quiz-specific section details
+          if (quizId && unitData[quizId] && unitData[quizId].section_detail) {
+            console.log(`Found quiz_id ${quizId} section details for unit ${unitName}`);
+            
+            // Get section IDs specific to this quiz from section_detail
+            const quizSections = unitData[quizId].section_detail || {};
+            Object.keys(quizSections).forEach(sectionId => {
+              if (competencyMap[sectionId]) {
+                filteredCompetencyMap[sectionId] = competencyMap[sectionId];
+                console.log(`Added section for quiz ${quizId}: ${sectionId} - ${competencyMap[sectionId]}`);
+              }
+            });
+          }
+          
+          // Also check the score_detail which may have all sections
+          const scoreDetail = unitData.score_detail || {};
+          if (quizId) {
+            // Filter score_detail to only include sections for this quiz
+            Object.keys(scoreDetail).forEach(sectionId => {
+              // Only add if not already added from section_detail and exists in competency map
+              if (!filteredCompetencyMap[sectionId] && competencyMap[sectionId]) {
+                // Use the unit's quiz section data to verify this sectionId belongs to the selected quiz
+                if (unitData[quizId] && 
+                    unitData[quizId].section_detail && 
+                    unitData[quizId].section_detail[sectionId]) {
+                  filteredCompetencyMap[sectionId] = competencyMap[sectionId];
+                  console.log(`Added section from score_detail: ${sectionId} - ${competencyMap[sectionId]}`);
+                }
+              }
+            });
+          }
+        });
+        
+        console.log('Filtered competency map for quiz_id', quizId, ':', filteredCompetencyMap);
+        
+        // Only update if the filtered map is different from the current one
+        // and has at least one entry
+        if (Object.keys(filteredCompetencyMap).length > 0 && 
+            JSON.stringify(filteredCompetencyMap) !== JSON.stringify(competencyMap)) {
+          setCompetencyMap(filteredCompetencyMap);
+          setIsFiltered(true); // Mark as filtered to avoid infinite loop
+          return; // Will re-run this effect with the updated map
+        } else {
+          // Mark as filtered even if we didn't change the map
+          setIsFiltered(true);
+        }
+      }
       
       // Detect which competencies are present in the current data
       const presentSectionIds = new Set();
       
-      Object.values(data.data).forEach(unitData => {
+      Object.values(reportData.data).forEach(unitData => {
+        console.log('Processing unit data:', unitData);
         const scoreDetail = unitData.score_detail || {};
+        console.log('Score detail:', scoreDetail);
+        
         Object.keys(scoreDetail).forEach(sectionId => {
           const compData = scoreDetail[sectionId];
+          console.log(`Checking section ID: ${sectionId}, Data:`, compData);
           if (compData && (compData.unit_section_score_average || compData.unit_section_score_percentile)) {
+            console.log(`Adding section ID: ${sectionId} to presentSectionIds`);
             presentSectionIds.add(sectionId);
           }
         });
       });
       
+      console.log('Present section IDs:', Array.from(presentSectionIds));
+      console.log('Competency map keys:', Object.keys(competencyMap));
+      
       // Filter competencies to only those present in data
       const activeCompetencyList = Array.from(presentSectionIds)
-        .filter(id => competencyMap[id])
-        .map(id => ({ id, name: competencyMap[id] }));
+        .filter(id => {
+          const exists = competencyMap[id] !== undefined;
+          console.log(`Section ID: ${id}, Exists in competencyMap: ${exists}`);
+          return exists;
+        })
+        .map(id => ({
+          id,
+          name: competencyMap[id]
+        }));
       
-      console.log('Active competencies:', activeCompetencyList);
+      console.log('Final Active competencies:', activeCompetencyList);
       setActiveCompetencies(activeCompetencyList);
       
+      // Now process the data to create table rows
       processData();
     }
-  }, [data, sortConfig]);
+  }, [reportData, sortConfig, apiDataLoaded, competencyMap]);
 
   const processData = () => {
     const rows = [];
     let sno = 1;
 
-    Object.entries(data.data).forEach(([unitName, unitData]) => {
-      console.log('Processing Unit:', unitName); // Debug log
+    if (!reportData || !reportData.data) {
+      console.log('No report data to process');
+      setTableRows([]);
+      return;
+    }
+
+    Object.entries(reportData.data).forEach(([unitName, unitData]) => {
+      console.log('Processing Unit for table row:', unitName);
+      console.log('Unit data:', unitData);
       
       // Create a row for the unit
-    const row = {
-      sno: sno++,
-      unitName,
+      const row = {
+        sno: sno++,
+        unitName,
         competencies: {},
         totalScore: 0
-    };
+      };
 
       // Process score details
-      const scoreDetail = unitData.score_detail;
+      const scoreDetail = unitData.score_detail || {};
+      console.log('Score details for unit:', scoreDetail);
+      
       if (scoreDetail) {
-    Object.entries(competencyMap).forEach(([sectionId, competencyName]) => {
-      const compData = scoreDetail[sectionId] || {};
+        console.log('CompetencyMap being used:', competencyMap);
+        
+        // For each competency in our map, look for matching score data
+        Object.entries(competencyMap).forEach(([sectionId, competencyName]) => {
+          console.log(`Looking for section ID ${sectionId} (${competencyName}) in score details`);
+          const compData = scoreDetail[sectionId] || {};
+          console.log(`Found data for ${competencyName}:`, compData);
+          
           row.competencies[competencyName] = {
             avg: compData.unit_section_score_average ?? '-',
             percentile: compData.unit_section_score_percentile ?? '-'
           };
-          row.totalScore += parseFloat(compData.unit_section_score_average || 0);
+          
+          console.log(`Added to row competencies:`, row.competencies[competencyName]);
+          
+          // Add to total score
+          if (compData.unit_section_score_average) {
+            const score = parseFloat(compData.unit_section_score_average || 0);
+            row.totalScore += score;
+            console.log(`Added ${score} to totalScore, now: ${row.totalScore}`);
+          }
         });
       }
 
+      console.log('Final row data:', row);
       rows.push(row);
     });
 
@@ -264,7 +502,7 @@ const CompetencyMainTable = ({ data, isLoading }) => {
 
   console.log('Final Sorted Data:', sortedData);
 
-  if (isLoading) {
+  if (isLoading || !apiDataLoaded) {
     return (
       <div className="table-container">
         <div className="loading-container">
@@ -275,9 +513,17 @@ const CompetencyMainTable = ({ data, isLoading }) => {
     );
   }
 
-  if (!data || data.status !== 'success' || !data.data) {
+  if (apiError) {
+    return <div className="no-data">Error loading competency data: {apiError}</div>;
+  }
+
+  if (!reportData || reportData.status !== 'success' || !reportData.data) {
     return <div className="no-data">No valid data provided.</div>;
   }
+  
+  // Show which quiz and units we're displaying
+  const quizInfo = quizId ? `Quiz ID: ${quizId}` : 'No quiz selected';
+  const unitInfo = units && units.length > 0 ? `Units: ${units.join(', ')}` : 'No units selected';
 
   return (
     <div className="table-container">
