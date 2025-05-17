@@ -162,6 +162,12 @@ const UserSubCompetency = () => {
 
       console.log('Relevant topics for export:', relevantTopics);
 
+      // Get the first unit's data to calculate total possible scores
+      const firstUnit = Object.values(reportData.data)[0];
+      const firstUser = firstUnit ? Object.values(firstUnit)[0] : null;
+      const sectionDetail = firstUser?.section_detail;
+      const correctMarks = sectionDetail ? parseFloat(sectionDetail.correct_marks || 0) : 0;
+
       // Process the data using the same logic as the table
       Object.entries(reportData.data).forEach(([unitName, sections]) => {
         console.log('Processing unit:', unitName);
@@ -201,15 +207,18 @@ const UserSubCompetency = () => {
         relevantTopics.forEach(({ topicId, name }) => {
           const stats = topicStats[topicId];
           const abbr = getAbbreviation(name);
+          const topic = firstUser?.topic_detail?.[topicId];
+          const totalQuestions = topic ? parseFloat(topic.topic_total_question || 0) : 0;
+          const totalPossibleMarks = (correctMarks * totalQuestions).toFixed(1);
           
           if (stats && stats.count > 0) {
             const unitAvgScore = (stats.scoreSum / stats.count).toFixed(2);
             const mhPercentile = (stats.mhPercentileSum / stats.count).toFixed(2);
             
-            rowData[`${abbr} - Score`] = unitAvgScore;
+            rowData[`${abbr} - Score (Out of ${totalPossibleMarks})`] = unitAvgScore;
             rowData[`${abbr} - MH %ile`] = mhPercentile;
           } else {
-            rowData[`${abbr} - Score`] = '-';
+            rowData[`${abbr} - Score (Out of ${totalPossibleMarks})`] = '-';
             rowData[`${abbr} - MH %ile`] = '-';
           }
         });
@@ -229,10 +238,15 @@ const UserSubCompetency = () => {
       const worksheet = XLSX.utils.json_to_sheet(flatData);
 
       // Add legend data below the main data
-      const legendData = relevantTopics.map(({ topicId, name }) => ({
-        'Abbreviation': getAbbreviation(name),
-        'Full Topic Name': name
-      }));
+      const legendData = relevantTopics.map(({ topicId, name }) => {
+        const topic = firstUser?.topic_detail?.[topicId];
+        const totalQuestions = topic ? parseFloat(topic.topic_total_question || 0) : 0;
+        const totalPossibleMarks = (correctMarks * totalQuestions).toFixed(1);
+        return {
+          'Abbreviation': getAbbreviation(name),
+          'Full Topic Name': `${name} (Out of ${totalPossibleMarks})`
+        };
+      });
 
       console.log('Legend data:', legendData);
 
@@ -259,7 +273,7 @@ const UserSubCompetency = () => {
         key.includes('Score') || key.includes('%ile')
       );
       topicColumns.forEach(() => {
-        columnWidths.push({ wch: 15 });
+        columnWidths.push({ wch: 20 }); // Increased width to accommodate "Out of X"
       });
 
       worksheet['!cols'] = columnWidths;

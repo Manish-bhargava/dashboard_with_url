@@ -341,29 +341,113 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
   console.log('Final Sorted Data:', sortedData);
 
   const calculateTotalScore = (topicId) => {
-    // Find the section that contains this topic
-    const section = Object.values(reportData).find(unit => 
-      Object.values(unit).find(section => {
-        const topic = section.topic_detail?.[topicId];
-        return topic && section.section_detail;
-      })
-    );
+    console.log('Calculating score for topicId:', topicId);
+    console.log('Report Data:', reportData);
 
-    if (!section) return 0;
+    if (!reportData) {
+      console.log('No report data available');
+      return 0;
+    }
 
-    // Get the first section that contains the topic
-    const sectionData = Object.values(section).find(s => 
-      s.topic_detail?.[topicId] && s.section_detail
-    );
+    // Get the first unit's data
+    const firstUnit = Object.values(reportData)[0];
+    console.log('First Unit:', firstUnit);
+    
+    if (!firstUnit) {
+      console.log('No unit data found');
+      return 0;
+    }
 
-    if (!sectionData) return 0;
+    // Get the first user's data
+    const firstUser = Object.values(firstUnit)[0];
+    console.log('First User:', firstUser);
+    
+    if (!firstUser?.topic_detail) {
+      console.log('No topic detail found');
+      return 0;
+    }
 
-    const topic = sectionData.topic_detail[topicId];
-    const correctMarks = parseFloat(sectionData.section_detail.correct_marks || 0);
-    const totalQuestions = parseFloat(topic.topic_total_question || 0);
+    console.log('User topic_detail:', firstUser.topic_detail);
+    
+    // Get the topic data directly from user's topic_detail
+    const topic = firstUser.topic_detail[topicId];
+    if (topic) {
+      console.log('Found topic:', topic);
+      
+      // Get the section data for correct_marks
+      const sectionDetail = firstUser.section_detail;
+      console.log('Section detail:', sectionDetail);
+      
+      if (sectionDetail) {
+        // Get correct_marks directly from section_detail
+        const correctMarks = parseFloat(sectionDetail.correct_marks || 0);
+        // Get total_questions from topic
+        const totalQuestions = parseFloat(topic.topic_total_question || 0);
+        
+        console.log('Score calculation details:', {
+          correctMarks,
+          totalQuestions,
+          topicId,
+          sectionId: sectionDetail.section_id,
+          sectionName: sectionDetail.section_name,
+          quizSectionId: sectionDetail.quiz_section_id,
+          topicData: topic
+        });
+        
+        if (!isNaN(correctMarks) && !isNaN(totalQuestions)) {
+          // Multiply topic_total_question by correct_marks to get total possible marks
+          const totalPossibleMarks = correctMarks * totalQuestions;
+          console.log('Total possible marks calculation:', {
+            correctMarks,
+            totalQuestions,
+            totalPossibleMarks
+          });
+          return totalPossibleMarks.toFixed(1);
+        }
+      }
+    }
 
-    return (totalQuestions * correctMarks).toFixed(1);
+    console.log('No score found for topic', topicId);
+    return 0;
   };
+
+  // Add this function to get the actual score for a topic
+  const getTopicScore = (topicId) => {
+    if (!reportData) return 0;
+    
+    const firstUnit = Object.values(reportData)[0];
+    if (!firstUnit) return 0;
+    
+    const firstUser = Object.values(firstUnit)[0];
+    if (!firstUser?.topic_detail) return 0;
+    
+    const topic = firstUser.topic_detail[topicId];
+    if (topic) {
+      return parseFloat(topic.unit_topic_score_average || 0).toFixed(1);
+    }
+    
+    return 0;
+  };
+
+  // Add this useEffect for debugging
+  useEffect(() => {
+    const firstUnit = reportData ? Object.values(reportData)[0] : null;
+    const firstUser = firstUnit ? Object.values(firstUnit)[0] : null;
+    const firstSection = firstUser?.section_detail ? Object.values(firstUser.section_detail)[0] : null;
+    
+    console.log('Component Data:', {
+      reportData,
+      relevantTopics,
+      topicMappings,
+      firstUnit,
+      firstUser,
+      topicDetail: firstUser?.topic_detail,
+      sectionDetail: firstUser?.section_detail,
+      firstSection,
+      correctMarks: firstSection?.correct_marks,
+      firstTopic: firstUser?.topic_detail ? Object.values(firstUser.topic_detail)[0] : null
+    });
+  }, [reportData, relevantTopics, topicMappings]);
 
   return (
     <div className="table-container">
@@ -409,13 +493,14 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
             </th>
             {relevantTopics.map(({ topicId, name }) => {
               const abbr = topicAbbreviations[topicId];
+              const totalScore = calculateTotalScore(topicId);
               return (
                 <React.Fragment key={name}>
                   <th 
                     className="sortable-header"
                     onClick={() => handleSort(`${name}_score`)}
                   >
-                    {abbr} - Score
+                    {abbr} - Score (Out of {totalScore})
                     <span className="sort-arrows">
                       {getSortIcon(`${name}_score`)}
                     </span>

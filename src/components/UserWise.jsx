@@ -318,6 +318,70 @@ const UserWise = () => {
     setIsZoomed(!isZoomed);
   };
 
+  const calculateTotalScore = (sectionId) => {
+    if (!reportData?.data) return 0;
+
+    // If no sectionId is provided, calculate total possible score for all sections
+    if (!sectionId) {
+      let totalScore = 0;
+      for (const unitId in reportData.data) {
+        const unit = reportData.data[unitId];
+        if (!unit.quiz_detail) continue;
+
+        for (const quizId in unit.quiz_detail) {
+          const quiz = unit.quiz_detail[quizId];
+          if (!quiz) continue;
+
+          for (const studentId in quiz) {
+            const studentData = quiz[studentId];
+            if (!studentData?.quiz_detail?.[quizId]?.section_detail) continue;
+
+            const sectionDetail = studentData.quiz_detail[quizId].section_detail;
+            for (const sid in sectionDetail) {
+              const section = sectionDetail[sid];
+              // Just use correct_marks as the total score
+              if (section.correct_marks) {
+                const correctMarks = parseFloat(section.correct_marks);
+                if (!isNaN(correctMarks)) {
+                  totalScore += correctMarks;
+                }
+              }
+            }
+          }
+        }
+      }
+      console.log('Total Possible Score:', totalScore);
+      return totalScore.toFixed(1);
+    }
+
+    // Calculate score for specific section
+    for (const unitId in reportData.data) {
+      const unit = reportData.data[unitId];
+      if (!unit.quiz_detail) continue;
+
+      for (const quizId in unit.quiz_detail) {
+        const quiz = unit.quiz_detail[quizId];
+        if (!quiz) continue;
+
+        for (const studentId in quiz) {
+          const studentData = quiz[studentId];
+          if (!studentData?.quiz_detail?.[quizId]?.section_detail?.[sectionId]) continue;
+
+          const section = studentData.quiz_detail[quizId].section_detail[sectionId];
+          // Just use correct_marks as the total score
+          if (section.correct_marks) {
+            const correctMarks = parseFloat(section.correct_marks);
+            if (!isNaN(correctMarks)) {
+              return correctMarks.toFixed(1);
+            }
+          }
+        }
+      }
+    }
+
+    return 0;
+  };
+
   return (
     <div className="userwise-container">
       <h1 style={{color:'blue', fontSize:'20px', fontWeight:'bold',marginBottom:'10px'}}>Performance Report</h1>

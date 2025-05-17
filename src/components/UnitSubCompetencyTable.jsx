@@ -94,8 +94,9 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
           const topics = section.topic_detail || {};
           Object.entries(topics).forEach(([topicId, topic]) => {
             if (topicMappings[topicId]) {
+              // Use the actual topic score from the data
               topicMap[topicId] = {
-                score: topic.topic_total_score,
+                score: topic.topic_total_score || '-',
                 unitPercentile: topic.unit_topic_percentile_score,
                 mhPercentile: topic.topic_percentile_score
               };
@@ -114,7 +115,7 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
           studentName: basic.student_name || '-',
           unit: basic.unit_name || unitName,
           department: basic.department || '-',
-          totalScore: totalScore ? totalScore.toFixed(2) : '-',
+          totalScore: totalScore ? totalScore.toFixed(1) : '-',
           topicMap
         };
 
@@ -244,12 +245,30 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
     const topic = section.topic_detail[topicId];
     if (!topic) return 0;
 
+    // Calculate score using topic_total_question and correct_marks
     const correctMarks = parseFloat(section.correct_marks || 0);
     const totalQuestions = parseFloat(topic.topic_total_question || 0);
+    
+    if (!isNaN(correctMarks) && !isNaN(totalQuestions)) {
+      const score = correctMarks * totalQuestions;
+      return score.toFixed(1);
+    }
 
-    // Calculate maximum possible score
-    const maxScore = totalQuestions * correctMarks;
-    return maxScore.toFixed(1);
+    return 0;
+  };
+
+  const calculateTotalPossibleScore = () => {
+    if (!reportData) return 0;
+    let totalScore = 0;
+
+    // Sum up all topic scores
+    relevantTopics.forEach(({ topicId }) => {
+      const score = calculateTotalScore(topicId);
+      totalScore += parseFloat(score) || 0;
+    });
+
+    console.log('Total Possible Score:', totalScore);
+    return totalScore.toFixed(1);
   };
 
   const getSortIcon = (key) => {
@@ -315,7 +334,7 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
                       onClick={() => handleSort('totalScore')}
                       style={{ cursor: 'pointer' }}
                     >
-                      Total Score ({calculateTotalScore(relevantTopics[0]?.topicId)}) 
+                      Total Score ({calculateTotalPossibleScore()}) 
                       <span style={{ marginLeft: '5px' }}>
                         {getSortIcon('totalScore')}
                       </span>
