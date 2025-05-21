@@ -55,6 +55,19 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
     if (key === 'sno') return row.sno;
     if (key === 'unitName') return row.unitName?.toLowerCase() || '';
     
+    // Handle total score sorting
+    if (key === 'totalScore') {
+      let totalScore = 0;
+      
+      // Sum up all competency scores for this row
+      Object.entries(row.competencies).forEach(([compName, compData]) => {
+        const score = compData.avg === '-' ? 0 : parseFloat(compData.avg) || 0;
+        totalScore += score;
+      });
+      
+      return totalScore;
+    }
+    
     const match = key.match(/(score|percentile)_(.+)/);
     if (match) {
       const type = match[1];
@@ -148,15 +161,25 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
         competencyAbbreviations
       });
 
+      // Make sure to include the EXACT maxScore values being displayed in the table
       const sections = activeCompetencies.map(({ id, name }) => ({
         id,
         name,
-        abbreviation: competencyAbbreviations[id]
+        abbreviation: competencyAbbreviations[id],
+        // This is crucial - include the exact maxScore values used in the table display
+        maxScore: competencyValues[id]
       }));
+
+      // Calculate the total value displayed in the table
+      const tableTotalPossibleScore = activeCompetencies.reduce(
+        (sum, { id }) => sum + parseFloat(competencyValues[id] || 0), 
+        0
+      ).toFixed(1);
 
       const newData = {
         rows: tableRows,
-        sections: sections
+        sections: sections,
+        totalPossibleScore: tableTotalPossibleScore
       };
 
       onDataUpdate(newData);
@@ -430,6 +453,15 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
                 {getSortIcon('unitName')}
               </span>
             </th>
+            <th 
+              className="sortable-header"
+              onClick={() => handleSort('totalScore')}
+            >
+              Total Score (Out of {activeCompetencies.reduce((sum, { id }) => sum + parseFloat(competencyValues[id] || 0), 0).toFixed(1)})
+              <span className="sort-arrows">
+                {getSortIcon('totalScore')}
+              </span>
+            </th>
             {activeCompetencies.map(({ id: sectionId }) => {
               const abbr = competencyAbbreviations[sectionId];
               return (
@@ -438,7 +470,7 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
                     className="sortable-header"
                     onClick={() => handleSort(`score_${sectionId}`)}
                   >
-                    {abbr} - Score ({competencyValues[sectionId]})
+                    {abbr} - Score (Out of {competencyValues[sectionId]})
                     <span className="sort-arrows">
                       {getSortIcon(`score_${sectionId}`)}
                     </span>
@@ -469,6 +501,12 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
               <tr key={row.sno}>
                 <td>{row.sno}</td>
                 <td>{row.unitName}</td>
+                <td>
+                  {Object.entries(row.competencies).reduce((total, [compName, compData]) => {
+                    const score = compData.avg === '-' ? 0 : parseFloat(compData.avg) || 0;
+                    return total + score;
+                  }, 0).toFixed(2)}
+                </td>
                 {activeCompetencies.map(({ id: sectionId }) => (
                   <React.Fragment key={sectionId}>
                     <td>{row.competencies[competencyMap[sectionId]]?.avg}</td>

@@ -22,9 +22,10 @@ const UserWise = () => {
   const [hasStudentNames, setHasStudentNames] = useState(false);
   const [tableData, setTableData] = useState(null);
   
-  // Create refs for the dropdown components to detect clicks outside
+  // Refs for dropdown components and mounted state
   const unitsDropdownRef = useRef(null);
   const testsDropdownRef = useRef(null);
+  const isMounted = useRef(true);
 
   useEffect(() => {
     const fetchUnitsAndQuizzes = async () => {
@@ -84,7 +85,7 @@ const UserWise = () => {
         setError('Failed to fetch units. Status not "success".');
       }
     } catch (error) {
-      console.error('❌ Error fetching unit list:', error);
+      setError('Error loading units. Please try again.');
     }
   };
 
@@ -100,7 +101,6 @@ const UserWise = () => {
         setError('Failed to fetch quizzes: Data not in expected format.');
       }
     } catch (error) {
-      console.error('❌ Error fetching quiz list:', error);
       setError('Could not fetch quiz list. Please try again later.');
     }
   };
@@ -112,16 +112,10 @@ const UserWise = () => {
       return;
     }
 
-    console.log("✅ Selected Units:", selectedUnits);
-    console.log("✅ Selected Quiz ID:", selectedQuizId);
-    console.log("✅ Selected Test:", selectedTest); // Changed log key
-
     const requestBody = {
       unit: selectedUnits,
       quiz_id: [selectedQuizId] // API expects an array
     };
-    
-    console.log('🔍 Request Body:', requestBody);
 
     setError(null); // Clear previous errors before new request
     setReportData(null); // Clear previous data before new request
@@ -139,8 +133,7 @@ const UserWise = () => {
         setReportData(null); // Ensure data is cleared on non-success
       }
     } catch (error) {
-      console.error('❌ Error fetching main competency report:', error);
-      setError('Failed to fetch report due to a network or server error.');
+      setError('Failed to fetch report. Please check your connection and try again.');
       setReportData(null); // Ensure data is cleared on catch
     } finally {
       setLoading(false);
@@ -159,7 +152,7 @@ const UserWise = () => {
     setSelectedTest(quiz.quiz_name);
     setSelectedQuizId(quiz.quiz_id);
     setShowTestsDropdown(false);
-    console.log(`Selected quiz: ${quiz.quiz_name} (ID: ${quiz.quiz_id})`);
+
   };
 
   const toggleSelectAllUnits = () => {
@@ -178,41 +171,61 @@ const UserWise = () => {
   };
 
   const handleTableDataUpdate = (data) => {
-    console.log('Table data updated:', data);
     setTableData(data);
   };
 
   const handleExport = () => {
-    console.log('Starting export process...');
-    console.log('Current table data:', tableData);
-
     if (!tableData || !tableData.rows || tableData.rows.length === 0) {
-      console.log('❌ No table data available');
       setError('No data available to download. Please apply filters first.');
       return;
     }
 
     try {
-      console.log('Starting Excel export with table data');
       const flatData = [];
-
+      
+      // Get section max scores from the CompetencyTable component
+      // These should be displayed in the table headers
+      const sectionMaxScores = {};
+      
+      // Get the actual max scores from the tableData
+      // These scores are calculated in the CompetencyTable component
+      tableData.headerScores = tableData.headerScores || {};
+      
+      // Use the exact scores from the table data
+      tableData.sections.forEach(section => {
+        const sectionId = section.id;
+        // Use the headerScores from the table data which matches what's shown in the table
+        sectionMaxScores[sectionId] = tableData.headerScores[sectionId] || '10';
+      });
+      
+      // Calculate total possible score - sum of all section max scores
+      const totalPossibleScore = Object.values(sectionMaxScores)
+        .reduce((sum, score) => sum + parseFloat(score || 0), 0)
+        .toFixed(2);
+      
       // Process each row from the table data
-      tableData.rows.forEach(row => {
+      tableData.rows.forEach((row, index) => {
         const rowData = {
-          'Student Name': row.studentName,
-          'Units': Array.from(row.units).join(', '),
-          'Department': row.department,
-          'Total Score': row.totalScore.toFixed(2)
+          'S.No': index + 1,
+          'Student Name': row.studentName || '-',
+          'Units': Array.isArray(row.units) ? row.units.join(', ') : Array.from(row.units || []).join(', '),
+          'Department': row.department || '-',
+          [`Total Score (Out of ${totalPossibleScore})`]: (row.totalScore || 0).toFixed(2)
         };
 
-        // Add competency-specific columns
-        tableData.sections.forEach(({ id, abbreviation }) => {
-          const sectionData = row.sectionDetail[id];
-          if (sectionData) {
-            rowData[`${abbreviation} - Score`] = sectionData.calculated_score || '0';
-            rowData[`${abbreviation} - MH %ile`] = sectionData.section_percentile_score || '0';
-            rowData[`${abbreviation} - Unit %ile`] = sectionData.unit_section_percentile_score || '0';
-          }
+        // Add competency-specific columns with scores in headers
+        tableData.sections.forEach(({ id, abbreviation, name }) => {
+          const sectionData = row.sectionDetail?.[id];
+          // Use the exact max score from the table data's headerScores
+          const maxScore = tableData.headerScores[id] || sectionMaxScores[id] || '10';
+          
+          // Use the same score format as shown in the table
+          const displayScore = sectionData?.calculated_score || '0';
+          
+          // Don't format the score - keep it exactly as it is in the table
+          rowData[`${abbreviation} - Score (Out of ${maxScore})`] = displayScore;
+          rowData[`${abbreviation} - MH %ile`] = sectionData?.section_percentile_score || '0';
+          rowData[`${abbreviation} - Unit %ile`] = sectionData?.unit_section_percentile_score || '0';
         });
 
         console.log('Adding row data:', rowData);
@@ -227,10 +240,14 @@ const UserWise = () => {
         console.log('Worksheet created successfully');
 
         // Add legend data below the main data
-        const legendData = tableData.sections.map(({ abbreviation, name }) => ({
-          'Abbreviation': abbreviation,
-          'Full Competency Name': name
-        }));
+        const legendData = tableData.sections.map(({ id, abbreviation, name }) => {
+          // Use the exact max score from tableData.headerScores
+          const maxScore = tableData.headerScores[id] || sectionMaxScores[id] || '10';
+          return {
+            'Abbreviation': abbreviation,
+            'Full Competency Name': `${name} (Out of ${maxScore})`
+          };
+        });
 
         // Add a blank row
         XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
@@ -240,27 +257,38 @@ const UserWise = () => {
         
         // Add legend data
         legendData.forEach((item, index) => {
-          XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
-            { origin: 'A' + (flatData.length + 4 + index) });
+          XLSX.utils.sheet_add_aoa(
+            worksheet, 
+            [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
+            { origin: 'A' + (flatData.length + 4 + index) }
+          );
         });
-
-        // Set column widths for main data
+        
+        // Set column widths - increased for better readability
         const columnWidths = [
-          { wch: 25 },  // Student Name
+          { wch: 10 },  // S.No
+          { wch: 30 },  // Student Name
           { wch: 30 },  // Units
           { wch: 20 },  // Department
-          { wch: 15 },  // Total Score
+          { wch: 35 },  // Total Score with Out of - increased width
         ];
-
+        
         // Add dynamic column widths for competency-specific columns
         const competencyColumns = Object.keys(flatData[0]).filter(key => 
           key.includes('Score') || key.includes('%ile')
         );
-        competencyColumns.forEach(() => {
-          columnWidths.push({ wch: 15 });
+        competencyColumns.forEach((key) => {
+          // Use wider columns for Score columns that have Out of values
+          if (key.includes('Score')) {
+            columnWidths.push({ wch: 35 }); // Wider for 'Out of' scores
+          } else {
+            columnWidths.push({ wch: 20 }); // Percentile columns
+          }
         });
-
+        
         worksheet['!cols'] = columnWidths;
+
+        // Column widths are already set above
 
         // Create workbook and append worksheet
         const workbook = XLSX.utils.book_new();
@@ -275,19 +303,14 @@ const UserWise = () => {
         const blob = new Blob([excelBuffer], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         });
-        console.log('Blob created successfully');
 
         // Save file
         const fileName = `UserWise_Main_Competency_Report_${selectedTest}_${new Date().toISOString().split('T')[0]}.xlsx`;
-        console.log('Attempting to save file:', fileName);
         
         // Try using saveAs directly
         try {
           saveAs(blob, fileName);
-          console.log('File saved successfully using saveAs');
         } catch (saveError) {
-          console.error('Error using saveAs:', saveError);
-          
           // Fallback method using URL.createObjectURL
           try {
             const url = window.URL.createObjectURL(blob);
@@ -298,18 +321,14 @@ const UserWise = () => {
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
-            console.log('File saved successfully using URL.createObjectURL');
           } catch (urlError) {
-            console.error('Error using URL.createObjectURL:', urlError);
-            throw new Error('Failed to save file using both methods');
+            throw new Error('Failed to save file');
           }
         }
       } catch (excelError) {
-        console.error('Error in Excel generation:', excelError);
         throw new Error('Failed to generate Excel file');
       }
     } catch (error) {
-      console.error('❌ Error in export process:', error);
       setError(`Error generating Excel file: ${error.message}`);
     }
   };
@@ -350,7 +369,6 @@ const UserWise = () => {
           }
         }
       }
-      console.log('Total Possible Score:', totalScore);
       return totalScore.toFixed(1);
     }
 

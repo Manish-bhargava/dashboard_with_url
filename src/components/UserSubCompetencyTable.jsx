@@ -196,54 +196,40 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
   const safe = (val) => (val === null || val === undefined || val === '' ? '-' : val);
 
   const getSortableValue = (row, key) => {
-    console.log('Getting sortable value for:', { row, key });
+    if (key === 'sno') return row.sno;
+    if (key === 'unitName') return row.unitName;
     
-    // Handle basic fields
-    if (key === 'sno') {
-      const value = row.sno;
-      console.log('S.No value:', value);
-      return value;
-    }
-    if (key === 'unitName') {
-      const value = row.unitName?.toLowerCase() || '';
-      console.log('Unit Name value:', value);
-      return value;
+    // Handle total score sorting
+    if (key === 'totalScore') {
+      const totalScore = row.subCompetencyStats.reduce((total, stat) => {
+        const score = parseFloat(safe(stat.unitAvgScore)) || 0;
+        return total + score;
+      }, 0);
+      return isNaN(totalScore) ? -Infinity : totalScore;
     }
     
-    // Handle competency scores and percentiles
-    const match = key.match(/(.+)_(score|percentile)$/);
-    if (match) {
-      const competencyName = match[1];
-      const isPercentile = match[2] === 'percentile';
-      
-      console.log('Looking for competency:', {
-        competencyName,
-        isPercentile,
-        subCompetencyStats: row.subCompetencyStats
-      });
-
-      // Find the matching competency in subCompetencyStats
-      const competencyData = row.subCompetencyStats.find(stat => stat.name === competencyName);
-      if (!competencyData) {
-        console.log('No matching competency found:', competencyName);
-        return 0;
+    // Handle individual score and percentile sorting
+    if (key.endsWith('_score')) {
+      const topicName = key.replace('_score', '');
+      const statEntry = row.subCompetencyStats.find(stat => stat.name === topicName);
+      if (statEntry) {
+        const score = parseFloat(statEntry.unitAvgScore);
+        return isNaN(score) ? -Infinity : score;
       }
-
-      const value = isPercentile ? 
-        (competencyData.mhPercentile === '-' ? 0 : parseFloat(competencyData.mhPercentile) || 0) :
-        (competencyData.unitAvgScore === '-' ? 0 : parseFloat(competencyData.unitAvgScore) || 0);
-
-      console.log('Competency value:', {
-        competencyName,
-        isPercentile,
-        rawValue: isPercentile ? competencyData.mhPercentile : competencyData.unitAvgScore,
-        parsedValue: value
-      });
-      return value;
+      return -Infinity;
     }
-
-    console.log('No matching sort key found, returning 0');
-    return 0;
+    
+    if (key.endsWith('_percentile')) {
+      const topicName = key.replace('_percentile', '');
+      const statEntry = row.subCompetencyStats.find(stat => stat.name === topicName);
+      if (statEntry) {
+        const percentile = parseFloat(statEntry.mhPercentile);
+        return isNaN(percentile) ? -Infinity : percentile;
+      }
+      return -Infinity;
+    }
+    
+    return row[key] || '';
   };
 
   const handleSort = (key) => {
@@ -491,6 +477,15 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
                 {getSortIcon('unitName')}
               </span>
             </th>
+            <th 
+              className="sortable-header"
+              onClick={() => handleSort('totalScore')}
+            >
+              Total Score (Out of {relevantTopics.reduce((sum, {topicId}) => sum + parseFloat(calculateTotalScore(topicId) || 0), 0).toFixed(1)})
+              <span className="sort-arrows">
+                {getSortIcon('totalScore')}
+              </span>
+            </th>
             {relevantTopics.map(({ topicId, name }) => {
               const abbr = topicAbbreviations[topicId];
               const totalScore = calculateTotalScore(topicId);
@@ -531,6 +526,12 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
               <tr key={row.sno}>
                 <td>{row.sno}</td>
                 <td>{row.unitName}</td>
+                <td>
+                  {row.subCompetencyStats.reduce((total, stat) => {
+                    const score = parseFloat(safe(stat.unitAvgScore)) || 0;
+                    return total + score;
+                  }, 0).toFixed(2)}
+                </td>
                 {row.subCompetencyStats.map((stat) => (
                   <React.Fragment key={stat.name}>
                     <td>{safe(stat.unitAvgScore)}</td>

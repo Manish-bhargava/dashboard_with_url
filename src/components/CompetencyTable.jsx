@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import './CompetencyTable.css';
 import * as XLSX from 'xlsx';
@@ -15,6 +15,7 @@ const getAbbreviation = (sectionName) => {
 const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQuizId, onDataUpdate }) => {
   const [localSearchTerm, setLocalSearchTerm] = useState(initialSearchTerm);
   const [sortOrder, setSortOrder] = useState('none'); // 'none', 'asc', 'desc'
+  const [sortKey, setSortKey] = useState('totalScore'); // Default sort by total score
   const [headerScores, setHeaderScores] = useState({});
   const [studentMap, setStudentMap] = useState(new Map());
   const [activeCompetencyMap, setActiveCompetencyMap] = useState({});
@@ -22,8 +23,10 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
   const [competencyAbbreviations, setCompetencyAbbreviations] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
-  const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
+  
+  // Use ref to prevent infinite loops
+  const lastDataRef = useRef(null);
 
   // Update local search term when prop changes
   useEffect(() => {
@@ -33,22 +36,16 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
   // Fetch competency definitions from API
   const fetchCompetencyData = useCallback(async () => {
     try {
-      console.log('Fetching competency definitions...');
       const response = await axios.post('/api/reportanalytics/getSubCompetency', {});
       
       const responseData = response.data;
-      console.log('Full API Response from getSubCompetency:', JSON.stringify(responseData, null, 2));
       
       if (responseData.status === 'success' && Array.isArray(responseData.data)) {
-        console.log('Competency Definition API Data:', JSON.stringify(responseData.data, null, 2));
-        
         // Build competency map from API data
         const newCompetencyMap = {};
         const newCompetencyAbbreviations = {};
         
         responseData.data.forEach(section => {
-          console.log('Processing section:', JSON.stringify(section, null, 2));
-          
           // Handle quiz_section_id which can be either an array or a string
           let sectionId;
           if (Array.isArray(section.quiz_section_id)) {
@@ -60,25 +57,17 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
           if (sectionId) {
             newCompetencyMap[sectionId] = section.section_name;
             newCompetencyAbbreviations[sectionId] = getAbbreviation(section.section_name);
-            console.log(`Added to map: ${sectionId} -> ${section.section_name}`);
-          } else {
-            console.warn('Invalid quiz_section_id format:', section.quiz_section_id);
           }
         });
-        
-        console.log('Generated Competency Map:', JSON.stringify(newCompetencyMap, null, 2));
-        console.log('Generated Abbreviations:', JSON.stringify(newCompetencyAbbreviations, null, 2));
         
         setActiveCompetencyMap(newCompetencyMap);
         setCompetencyAbbreviations(newCompetencyAbbreviations);
         setIsLoading(false);
       } else {
-        console.error('Invalid API response format:', JSON.stringify(responseData, null, 2));
         throw new Error('Invalid API response format for competency definitions');
       }
     } catch (error) {
-      console.error('Error fetching competency definitions:', error);
-      setApiError(error.message);
+      setApiError('Failed to load competency data. Please try again.');
       setIsLoading(false);
     }
   }, []);
@@ -87,114 +76,138 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
     fetchCompetencyData();
   }, [fetchCompetencyData]);
 
-  // Process data and update state
-  useEffect(() => {
-    if (data && typeof data === 'object' && Object.keys(activeCompetencyMap).length > 0 && selectedQuizId) {
-      console.log('Processing data with competency map:', activeCompetencyMap);
-      console.log('Selected Quiz ID:', selectedQuizId);
-      console.log('Raw data:', JSON.stringify(data, null, 2));
-      
-      const scores = {};
-      const newStudentMap = new Map();
-      const sectionsInSelectedQuiz = new Set();
-
-      // First pass: identify sections in the selected quiz
-      Object.entries(data).forEach(([unitId, unit]) => {
-        const quizDetails = unit.quiz_detail || {};
-        if (quizDetails[selectedQuizId]) {
-          const quiz = quizDetails[selectedQuizId];
-          Object.entries(quiz).forEach(([studentId, studentData]) => {
-            const sectionDetail = studentData.quiz_detail?.[selectedQuizId]?.section_detail || {};
-            Object.keys(sectionDetail).forEach(sectionId => {
-              sectionsInSelectedQuiz.add(sectionId);
-            });
-          });
-        }
-      });
-
-      console.log('Sections in selected quiz:', Array.from(sectionsInSelectedQuiz));
-
-      // Second pass: process data for identified sections
-      Object.entries(data).forEach(([unitId, unit]) => {
-        const quizDetails = unit.quiz_detail || {};
-        if (quizDetails[selectedQuizId]) {
-          const quiz = quizDetails[selectedQuizId];
-          Object.entries(quiz).forEach(([studentId, studentData]) => {
-            const userDetails = studentData.user_basic_detail || {};
-            const studentName = userDetails.student_name || '-';
-            const unitName = userDetails.unit_name || unitId;
-            const department = userDetails.department || '-';
-            const totalScore = studentData.total_score?.[selectedQuizId] || 0;
-            const leadershipInitialScore = studentData.leadership_initial_score || '-';
-
-            if (!newStudentMap.has(studentId)) {
-              newStudentMap.set(studentId, {
-                studentId,
-                studentName,
-                department,
-                leadershipInitialScore,
-                units: new Set([unitName]),
-                totalScore: parseFloat(totalScore) || 0,
-                sectionDetail: {}
-              });
-            } else {
-              const existingRecord = newStudentMap.get(studentId);
-              existingRecord.units.add(unitName);
-              existingRecord.totalScore = Math.max(existingRecord.totalScore, parseFloat(totalScore) || 0);
-            }
-
-            const sectionDetail = studentData.quiz_detail?.[selectedQuizId]?.section_detail || {};
-            const studentRecord = newStudentMap.get(studentId);
-            
-            Object.entries(sectionDetail).forEach(([sectionId, section]) => {
-              if (sectionsInSelectedQuiz.has(sectionId)) {
-                // Log the section data to debug
-                console.log('Section data for', sectionId, ':', section);
-                
-                // Get the unit percentile score from the correct path
-                const unitPercentileScore = section.unit_section_percentile_score || 
-                                          section.unit_percentile_score || 
-                                          section.unit_percentile || 
-                                          '-';
-                
-                studentRecord.sectionDetail[sectionId] = {
-                  calculated_score: section.section_total_score || '-',
-                  section_percentile_score: section.section_percentile_score || '-',
-                  unit_section_percentile_score: unitPercentileScore
-                };
-
-                // Log the processed section detail
-                console.log('Processed section detail:', studentRecord.sectionDetail[sectionId]);
-
-                if (section.correct_marks && section.section_total_question) {
-                  const calculatedScore = parseFloat(section.correct_marks) * parseFloat(section.section_total_question);
-                  if (!scores[sectionId] || calculatedScore > parseFloat(scores[sectionId])) {
-                    scores[sectionId] = calculatedScore.toFixed(2);
-                  }
-                }
-              }
-            });
-          });
-        }
-      });
-      
-      console.log('Processed data length:', newStudentMap.size);
-      console.log('Section names:', Array.from(sectionsInSelectedQuiz).map(id => activeCompetencyMap[id] || id));
-      console.log('Sample student data:', Array.from(newStudentMap.values())[0]);
-      
-      setQuizSpecificSections(sectionsInSelectedQuiz);
-      setHeaderScores(scores);
-      setStudentMap(newStudentMap);
+  // Process data and update state - memoized to prevent unnecessary recalculations
+  const processedState = useMemo(() => {
+    if (!data || typeof data !== 'object' || !Object.keys(activeCompetencyMap).length || !selectedQuizId) {
+      return null;
     }
-  }, [data, activeCompetencyMap, selectedQuizId]);
+    
+    const scores = {};
+    const newStudentMap = new Map();
+    const sectionsInSelectedQuiz = new Set();
 
-  const handleSort = () => {
+    // First pass: identify sections in the selected quiz
+    Object.entries(data).forEach(([unitId, unit]) => {
+      const quizDetails = unit.quiz_detail || {};
+      if (!quizDetails[selectedQuizId]) return;
+      
+      const quiz = quizDetails[selectedQuizId];
+      Object.entries(quiz).forEach(([studentId, studentData]) => {
+        const sectionDetail = studentData.quiz_detail?.[selectedQuizId]?.section_detail || {};
+        Object.keys(sectionDetail).forEach(sectionId => {
+          sectionsInSelectedQuiz.add(sectionId);
+        });
+      });
+    });
+
+    // Second pass: build student data
+    Object.entries(data).forEach(([unitId, unit]) => {
+      const quizDetails = unit.quiz_detail || {};
+      if (!quizDetails[selectedQuizId]) return;
+      
+      const quiz = quizDetails[selectedQuizId];
+      Object.entries(quiz).forEach(([studentId, studentData]) => {
+        const userDetails = studentData.user_basic_detail || {};
+        const studentName = userDetails.student_name || '-';
+        const unitName = userDetails.unit_name || unitId;
+        const department = userDetails.department || '-';
+        const totalScore = studentData.total_score?.[selectedQuizId] || 0;
+        const leadershipInitialScore = studentData.leadership_initial_score || '-';
+
+        if (!newStudentMap.has(studentId)) {
+          newStudentMap.set(studentId, {
+            studentId,
+            studentName,
+            department,
+            leadershipInitialScore,
+            units: new Set([unitName]),
+            totalScore: parseFloat(totalScore) || 0,
+            sectionDetail: {}
+          });
+        } else {
+          const existingRecord = newStudentMap.get(studentId);
+          existingRecord.units.add(unitName);
+          existingRecord.totalScore = Math.max(existingRecord.totalScore, parseFloat(totalScore) || 0);
+        }
+
+        const sectionDetail = studentData.quiz_detail?.[selectedQuizId]?.section_detail || {};
+        const studentRecord = newStudentMap.get(studentId);
+        
+        Object.entries(sectionDetail).forEach(([sectionId, section]) => {
+          if (sectionsInSelectedQuiz.has(sectionId)) {
+            // Get the unit percentile score from the correct path
+            const unitPercentileScore = section.unit_section_percentile_score || 
+                                      section.unit_percentile_score || 
+                                      section.unit_percentile || 
+                                      '-';
+            
+            studentRecord.sectionDetail[sectionId] = {
+              calculated_score: section.section_total_score || '-',
+              section_percentile_score: section.section_percentile_score || '-',
+              unit_section_percentile_score: unitPercentileScore
+            };
+
+            if (section.correct_marks && section.section_total_question) {
+              const calculatedScore = parseFloat(section.correct_marks) * parseFloat(section.section_total_question);
+              if (!scores[sectionId] || calculatedScore > parseFloat(scores[sectionId])) {
+                scores[sectionId] = calculatedScore.toFixed(2);
+              }
+            }
+          }
+        });
+      });
+    });
+    
+    return {
+      scores,
+      studentMap: newStudentMap,
+      sectionsInSelectedQuiz
+    };
+  }, [data, activeCompetencyMap, selectedQuizId]);
+  
+  // Update state based on processed data
+  useEffect(() => {
+    if (processedState) {
+      setQuizSpecificSections(processedState.sectionsInSelectedQuiz);
+      setHeaderScores(processedState.scores);
+      setStudentMap(processedState.studentMap);
+    }
+  }, [processedState]);
+
+  // Get sortable value from a data row based on sort key
+  const getSortableValue = useCallback((row, key) => {
+    if (!row) return 0;
+    
+    // If key indicates sorting by a specific section score
+    if (key && key.startsWith('section_')) {
+      const sectionId = key.replace('section_', '');
+      return parseFloat(row.sectionDetail?.[sectionId]?.calculated_score) || 0;
+    }
+    
+    // If key indicates sorting by a specific section percentile
+    if (key && key.startsWith('percentile_')) {
+      const sectionId = key.replace('percentile_', '');
+      return parseFloat(row.sectionDetail?.[sectionId]?.section_percentile_score) || 0;
+    }
+    
+    // If key indicates sorting by a specific unit percentile
+    if (key && key.startsWith('unit_percentile_')) {
+      const sectionId = key.replace('unit_percentile_', '');
+      return parseFloat(row.sectionDetail?.[sectionId]?.unit_section_percentile_score) || 0;
+    }
+    
+    // Default sorting by total score
+    return row.totalScore || 0;
+  }, []);
+
+  // Handle sorting toggle
+  const handleSort = useCallback(() => {
     setSortOrder(prev => {
       if (prev === 'none') return 'asc';
       if (prev === 'asc') return 'desc';
       return 'none';
     });
-  };
+  }, []);
 
   const calculateTotalScore = (sectionId) => {
     // First try to get score from headerScores
@@ -233,20 +246,6 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
     return 0;
   };
 
-  const calculateTotalPossibleScore = () => {
-    if (!data) return 0;
-    let totalScore = 0;
-
-    // Sum up all section scores
-    Array.from(sectionNames).forEach(sectionId => {
-      const score = calculateTotalScore(sectionId);
-      totalScore += parseFloat(score) || 0;
-    });
-
-    console.log('Total Possible Score:', totalScore);
-    return totalScore.toFixed(1);
-  };
-
   const renderPercentileBar = (value) => {
     if (!value || value === '-') return '-';
     const percentage = parseFloat(value);
@@ -266,49 +265,80 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
   };
 
   // Process data for display and export
-  const processedData = Array.from(studentMap.values())
-    .filter(item => {
-      if (!localSearchTerm) return true;
-      const searchLower = localSearchTerm.toLowerCase();
-      return (
-        item.studentName.toLowerCase().includes(searchLower) ||
-        Array.from(item.units).some(unit => unit.toLowerCase().includes(searchLower)) ||
-        item.department.toLowerCase().includes(searchLower)
-      );
-    })
-    .sort((a, b) => {
-      if (sortOrder === 'none') return 0;
-      if (sortOrder === 'asc') return a.totalScore - b.totalScore;
-      return b.totalScore - a.totalScore;
-    });
+  const processedData = useMemo(() => {
+    return Array.from(studentMap.values())
+      .filter(item => {
+        if (!localSearchTerm) return true;
+        const searchLower = localSearchTerm.toLowerCase();
+        // Convert units to array for searching if it's a Set
+        const unitsArray = Array.isArray(item.units) ? item.units : Array.from(item.units || []);
+        return (
+          (item.studentName || '').toLowerCase().includes(searchLower) ||
+          unitsArray.some(unit => unit.toLowerCase().includes(searchLower)) ||
+          (item.department || '').toLowerCase().includes(searchLower)
+        );
+      })
+      .sort((a, b) => {
+        if (sortOrder === 'none') return 0;
+        if (sortOrder === 'asc') return (a.totalScore || 0) - (b.totalScore || 0);
+        return (b.totalScore || 0) - (a.totalScore || 0);
+      });
+  }, [studentMap, localSearchTerm, sortOrder]);
 
   // Get section names for the selected quiz
-  const sectionNames = new Set();
-  processedData.forEach(row => {
-    Object.keys(row.sectionDetail).forEach(sectionId => {
-      if (activeCompetencyMap[sectionId] && quizSpecificSections.has(sectionId)) {
-        sectionNames.add(sectionId);
-      }
-    });
-  });
-
-  // Notify parent of data changes
-  useEffect(() => {
-    if (onDataUpdate && processedData.length > 0) {
-      onDataUpdate({
-        rows: processedData,
-        sections: Array.from(sectionNames).map(id => ({
-          id,
-          name: activeCompetencyMap[id],
-          abbreviation: competencyAbbreviations[id]
-        })),
-        headerScores
+  const sectionNames = useMemo(() => {
+    const names = new Set();
+    processedData.forEach(row => {
+      Object.keys(row.sectionDetail || {}).forEach(sectionId => {
+        if (activeCompetencyMap[sectionId] && quizSpecificSections.has(sectionId)) {
+          names.add(sectionId);
+        }
       });
+    });
+    return names;
+  }, [processedData, activeCompetencyMap, quizSpecificSections]);
+
+  // Calculate total possible score
+  const calculateTotalPossibleScore = useCallback(() => {
+    if (!data) return '0';
+    let totalScore = 0;
+
+    // Sum up all section scores
+    Array.from(sectionNames).forEach(sectionId => {
+      const score = calculateTotalScore(sectionId);
+      totalScore += parseFloat(score) || 0;
+    });
+
+    return totalScore.toFixed(1);
+  }, [data, sectionNames, calculateTotalScore]);
+
+  // Notify parent of data changes - memoized to prevent unnecessary calculations
+  const tableData = useMemo(() => {
+    if (!processedData || processedData.length === 0) return null;
+    
+    return {
+      rows: processedData,
+      sections: Array.from(sectionNames || []).map(sectionId => ({
+        id: sectionId,
+        name: activeCompetencyMap[sectionId] || '',
+        abbreviation: competencyAbbreviations[sectionId] || ''
+      })),
+      headerScores
+    };
+  }, [processedData, sectionNames, activeCompetencyMap, competencyAbbreviations, headerScores]);
+  
+  // Only send updates to parent when data actually changes
+  useEffect(() => {
+    if (!onDataUpdate || !tableData) return;
+    
+    const stringifiedData = JSON.stringify(tableData);
+    if (stringifiedData !== lastDataRef.current) {
+      lastDataRef.current = stringifiedData;
+      onDataUpdate(tableData);
     }
-  }, [processedData, sectionNames, activeCompetencyMap, competencyAbbreviations, headerScores, onDataUpdate]);
+  }, [tableData, onDataUpdate]);
 
   const filteredData = useMemo(() => {
-    console.log('Filtering data with search term:', localSearchTerm);
     if (!localSearchTerm) return processedData;
 
     const searchLower = localSearchTerm.toLowerCase();
@@ -321,55 +351,41 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
         (row.totalScore?.toString().includes(searchLower)) ||
         
         // Search in competency scores and percentiles
-        Object.values(row.sectionDetail).some(section => {
-          const sectionName = section.calculated_score?.toLowerCase() || '';
+        Object.values(row.sectionDetail || {}).some(section => {
+          if (!section) return false;
           const sectionScore = String(section.calculated_score || '').toLowerCase();
           const sectionPercentile = String(section.section_percentile_score || '').toLowerCase();
           
-          return sectionName.includes(searchLower) || 
-                 sectionScore.includes(searchLower) || 
-                 sectionPercentile.includes(searchLower);
+          return sectionScore.includes(searchLower) || sectionPercentile.includes(searchLower);
         })
       );
     });
   }, [processedData, localSearchTerm]);
 
-  console.log('Filtered Data:', filteredData);
-
+  // Avoid unnecessary sorts by memoizing the sorted data
+  // Sort the filtered data based on sort order and key
   const sortedData = useMemo(() => {
-    if (sortOrder === 'none') {
-      console.log('No sorting direction, returning filtered data');
+    if (sortOrder === 'none' || !filteredData || filteredData.length === 0) {
       return filteredData;
     }
 
     return [...filteredData].sort((a, b) => {
-      const aValue = getSortableValue(a, sortOrder);
-      const bValue = getSortableValue(b, sortOrder);
-
-      console.log('Sorting values:', {
-        key: sortOrder,
-        direction: sortOrder,
-        aValue,
-        bValue
-      });
+      const aValue = getSortableValue(a, sortKey);
+      const bValue = getSortableValue(b, sortKey);
 
       // Handle string comparison for text fields
       if (typeof aValue === 'string' && typeof bValue === 'string') {
-        const result = sortOrder === 'asc' ? 
+        return sortOrder === 'asc' ? 
           aValue.localeCompare(bValue) : 
           bValue.localeCompare(aValue);
-        console.log('String comparison result:', result);
-        return result;
       }
 
       // Handle numeric comparison for scores and percentiles
-      const result = sortOrder === 'asc' ? 
+      return sortOrder === 'asc' ? 
         aValue - bValue : 
         bValue - aValue;
-      console.log('Numeric comparison result:', result);
-      return result;
     });
-  }, [filteredData, sortOrder]);
+  }, [filteredData, sortOrder, sortKey, getSortableValue]);
 
   const handleExport = () => {
     if (!data || !selectedQuizId) {
@@ -378,7 +394,6 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
     }
 
     try {
-      console.log('Starting Excel export with data:', data);
       const flatData = [];
       
       // Process the data using the same logic as the table
@@ -386,6 +401,7 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
         const rowData = {
           'S.No': index + 1,
           'Student Name': student.studentName,
+          'Units': Array.isArray(student.units) ? student.units.join(', ') : Array.from(student.units || []).join(', '),
           'Department': student.department,
           [`Total Score (Out of ${calculateTotalPossibleScore()})`]: student.totalScore
         };
@@ -424,9 +440,10 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
       // Add legend data below the main data
       const legendData = Array.from(sectionNames).map(sectionId => {
         const totalScore = headerScores[sectionId] || '0';
+        const sectionName = activeCompetencyMap[sectionId] || sectionId;
         return {
-          'Abbreviation': competencyAbbreviations[sectionId],
-          'Full Competency Name': `${activeCompetencyMap[sectionId]} (Out of ${totalScore})`
+          'Abbreviation': competencyAbbreviations[sectionId] || sectionId,
+          'Full Competency Name': `${sectionName} (Out of ${totalScore})`
         };
       });
 
@@ -438,10 +455,15 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
       // Add legend header
       XLSX.utils.sheet_add_aoa(worksheet, [['Legend:']], { origin: 'A' + (flatData.length + 3) });
       
-      // Add legend data
+      // Add legend data with proper error handling
       legendData.forEach((item, index) => {
-        XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
-          { origin: 'A' + (flatData.length + 4 + index) });
+        if (item && item.Abbreviation && item['Full Competency Name']) {
+          XLSX.utils.sheet_add_aoa(
+            worksheet, 
+            [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
+            { origin: 'A' + (flatData.length + 4 + index) }
+          );
+        }
       });
 
       // Set column widths
@@ -573,6 +595,17 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
               className="sortable-header"
               onClick={() => handleSort()}
             >
+              Units
+              <span className="sort-arrows">
+                {sortOrder === 'none' && '↕️'}
+                {sortOrder === 'asc' && '↑'}
+                {sortOrder === 'desc' && '↓'}
+              </span>
+            </th>
+            <th 
+              className="sortable-header"
+              onClick={() => handleSort()}
+            >
               Department
               <span className="sort-arrows">
                 {sortOrder === 'none' && '↕️'}
@@ -646,6 +679,7 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
               <tr key={row.studentId}>
                 <td>{index + 1}</td>
                 <td>{row.studentName}</td>
+                <td>{Array.isArray(row.units) ? row.units.join(', ') : Array.from(row.units || []).join(', ')}</td>
                 <td>{row.department}</td>
                 <td>{row.totalScore}</td>
                 {Array.from(sectionNames).map(sectionId => (
@@ -668,4 +702,4 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
   );
 };
 
-export default CompetencyTable;
+export default React.memo(CompetencyTable);

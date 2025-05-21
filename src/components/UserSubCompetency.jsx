@@ -102,6 +102,10 @@ const UserSubCompetency = () => {
   };
 
   const handleCompetencySelect = (comp) => {
+    // Clear the report data when competency selection changes
+    if (comp !== selectedCompetency) {
+      setReportData(null);
+    }
     setSelectedCompetency((prev) => (prev === comp ? '' : comp));
   };
 
@@ -202,8 +206,30 @@ const UserSubCompetency = () => {
           'S.No': flatData.length + 1,
           'Unit': unitName,
         };
+        
+        // Calculate total score and total possible score
+        let totalScore = 0;
+        let totalPossibleScore = 0;
+        
+        // First loop to calculate totals
+        relevantTopics.forEach(({ topicId, name }) => {
+          const stats = topicStats[topicId];
+          const topic = firstUser?.topic_detail?.[topicId];
+          const totalQuestions = topic ? parseFloat(topic.topic_total_question || 0) : 0;
+          const totalPossibleMarks = correctMarks * totalQuestions;
+          
+          totalPossibleScore += totalPossibleMarks;
+          
+          if (stats && stats.count > 0) {
+            const unitAvgScore = stats.scoreSum / stats.count;
+            totalScore += unitAvgScore;
+          }
+        });
+        
+        // Add Total Score column
+        rowData[`Total Score (Out of ${totalPossibleScore.toFixed(1)})`] = totalScore.toFixed(2);
 
-        // Add topic data
+        // Now add individual topic data
         relevantTopics.forEach(({ topicId, name }) => {
           const stats = topicStats[topicId];
           const abbr = getAbbreviation(name);
@@ -262,18 +288,24 @@ const UserSubCompetency = () => {
           { origin: 'A' + (flatData.length + 4 + index) });
       });
 
-      // Set column widths
+      // Set column widths - increased for better readability
       const columnWidths = [
         { wch: 10 },  // S.No
-        { wch: 20 },  // Unit
+        { wch: 25 },  // Unit - increased width
+        { wch: 30 },  // Total Score with Out of - increased width
       ];
 
       // Add dynamic column widths for topic-specific columns
       const topicColumns = Object.keys(flatData[0]).filter(key => 
         key.includes('Score') || key.includes('%ile')
       );
-      topicColumns.forEach(() => {
-        columnWidths.push({ wch: 20 }); // Increased width to accommodate "Out of X"
+      topicColumns.forEach((key) => {
+        // Use wider columns for Score columns that have Out of values
+        if (key.includes('Score')) {
+          columnWidths.push({ wch: 30 }); // Wider for 'Out of' scores
+        } else {
+          columnWidths.push({ wch: 20 }); // Percentile columns
+        }
       });
 
       worksheet['!cols'] = columnWidths;

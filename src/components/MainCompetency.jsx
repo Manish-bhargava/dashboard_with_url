@@ -87,6 +87,11 @@ const MainCompetency = () => {
   };
 
   const handleTestSelect = (testName) => {
+    // If test selection is changing, clear the report data
+    if (testName !== selectedTest) {
+      setReportData(null);
+      setTableData(null);
+    }
     setSelectedTest(testName);
     setShowTestsDropdown(false); // Close dropdown on selection
   };
@@ -140,6 +145,19 @@ const MainCompetency = () => {
   const handleTableDataUpdate = useCallback((data) => {
     console.log('Received table data update:', data);
     if (data && data.rows && data.rows.length > 0) {
+      // Make sure sections include maxScore values from the component
+      if (data.sections) {
+        // Get competency values from the CompetencyMainTable component
+        const updatedSections = data.sections.map(section => {
+          // This ensures we have the maxScore values as displayed in the table
+          return {
+            ...section,
+            // Make sure maxScore exists
+            maxScore: section.maxScore || section.id // Use the ID which will be matched in CompetencyMainTable
+          };
+        });
+        data.sections = updatedSections;
+      }
       setTableData(data);
     }
   }, []); // Remove tableData from dependencies to prevent update loop
@@ -156,19 +174,67 @@ const MainCompetency = () => {
     try {
       console.log('Processing table data for Excel:', tableData);
 
-      // Process the data for Excel using the table's data
+      // Use EXACTLY the same total possible score as in the table
+      // The CompetencyMainTable component now sends us the exact totalPossibleScore it displays
+      // This ensures we use exactly the same value
+      let totalPossibleScore;
+      
+      if (tableData.totalPossibleScore) {
+        // Use the exact value from the table
+        totalPossibleScore = parseFloat(tableData.totalPossibleScore);
+        console.log('Using exact total possible score from table:', totalPossibleScore);
+      } else {
+        // Fallback calculation if totalPossibleScore is not provided
+        totalPossibleScore = 0;
+        
+        // Look at each section and check if it has a proper maxScore value
+        tableData.sections.forEach(section => {
+          // Some sections might be missing maxScore, so we need a fallback
+          if (section.maxScore) {
+            // Make sure to use the same parsing logic as the table
+            totalPossibleScore += parseFloat(section.maxScore || 0);
+          } else {
+            // If missing, use default 10 as in the table
+            totalPossibleScore += 10;
+          }
+        });
+      }
+      
+      console.log('Total possible score for Excel:', totalPossibleScore.toFixed(1));
+
+      // Process the data for Excel using the table's data - ENSURE THIS MATCHES THE TABLE DISPLAY EXACTLY
       const flatData = tableData.rows.map((row, index) => {
+        // Calculate total score for this row using EXACT SAME method as in the table display
+        const totalScore = Object.entries(row.competencies).reduce((total, [_, data]) => {
+          // Match the table display's calculation exactly
+          const score = data.avg === '-' ? 0 : parseFloat(data.avg) || 0;
+          return total + score;
+        }, 0);
+        
         const rowData = {
           'S.No': index + 1,
           'Unit': row.unitName,
-          'Total Score': row.totalScore
+          [`Total Score (Out of ${totalPossibleScore.toFixed(1)})`]: totalScore.toFixed(2) // Same precision as table
         };
 
         // Add competency scores and percentiles
         Object.entries(row.competencies).forEach(([competencyName, data]) => {
           const section = tableData.sections.find(s => s.name === competencyName);
           if (section) {
-            rowData[`${section.abbreviation} - Score`] = data.avg;
+            // Get exactly the same maxScore value as is shown in the table
+            // For this to match exactly, we need to get the maxScore directly from the HTML table
+            // We'll make sure the value matches what's in the table header
+            let maxScore;
+            if (section.maxScore) {
+              maxScore = section.maxScore;
+            } else {
+              // Default to 10 if not specified - MUST match the table default
+              maxScore = '10';
+            }
+            
+            // Ensure we're using the exact same value format as displayed in the table
+            // Don't convert to numbers and back to strings as that can cause precision issues
+            rowData[`${section.abbreviation} - Score (Out of ${maxScore})`] = data.avg; 
             rowData[`${section.abbreviation} - MH %ile`] = data.percentile;
           }
         });
@@ -182,10 +248,13 @@ const MainCompetency = () => {
       const worksheet = XLSX.utils.json_to_sheet(flatData);
 
       // Add legend data below the main data
-      const legendData = tableData.sections.map(section => ({
-        'Abbreviation': section.abbreviation,
-        'Full Competency Name': section.name
-      }));
+      const legendData = tableData.sections.map(section => {
+        const maxScore = section.maxScore || '10'; // Default to 10 if not specified
+        return {
+          'Abbreviation': section.abbreviation,
+          'Full Competency Name': `${section.name} (Out of ${maxScore})`
+        };
+      });
 
       // Add a blank row
       XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
@@ -199,19 +268,24 @@ const MainCompetency = () => {
           { origin: 'A' + (flatData.length + 4 + index) });
       });
 
-      // Set column widths
+      // Set column widths - increased for better readability
       const columnWidths = [
         { wch: 10 },  // S.No
-        { wch: 20 },  // Unit
-        { wch: 15 },  // Total Score
+        { wch: 25 },  // Unit - increased width
+        { wch: 30 },  // Total Score with Out of - increased width
       ];
 
       // Add dynamic column widths for section-specific columns
       const sectionColumns = Object.keys(flatData[0]).filter(key => 
         key.includes('Score') || key.includes('%ile')
       );
-      sectionColumns.forEach(() => {
-        columnWidths.push({ wch: 15 });
+      sectionColumns.forEach((key) => {
+        // Use wider columns for Score columns that have Out of values
+        if (key.includes('Score')) {
+          columnWidths.push({ wch: 30 }); // Wider for 'Out of' scores
+        } else {
+          columnWidths.push({ wch: 20 }); // Percentile columns
+        }
       });
 
       worksheet['!cols'] = columnWidths;

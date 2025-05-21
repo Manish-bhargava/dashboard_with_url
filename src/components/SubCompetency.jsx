@@ -146,10 +146,8 @@ const SubCompetency = () => {
   }, [selectedUnits]);
 
   const handleCompetencySelect = (comp) => {
-    console.log('Competency selected:', comp.name);
-    // Just update the selection, don't trigger the apply action
-    setSelectedCompetency(comp.name === selectedCompetency ? null : comp.name);
-    // Keep dropdown open to allow more selections
+    setSelectedCompetency(comp.name);
+    setShowCompetencyDropdown(false);
   };
 
   const handleClear = () => {
@@ -215,8 +213,31 @@ const SubCompetency = () => {
   };
 
   const handleTableDataUpdate = (data) => {
-    console.log('Table data updated:', data);
-    setTableData(data);
+    console.log('Received table data update:', data);
+    if (data && data.rows && data.rows.length > 0) {
+      // Make sure we have the maxScores and other relevant info for Excel export
+      if (!data.topicMaxScores && data.topics) {
+        // Create object to store topic max scores
+        const topicMaxScores = {};
+        
+        // Get topic max scores from each topic
+        data.topics.forEach(({ topicId }) => {
+          // This should come from the table's calculation
+          if (data.topicScores && data.topicScores[topicId]) {
+            topicMaxScores[topicId] = data.topicScores[topicId];
+          }
+        });
+        
+        data.topicMaxScores = topicMaxScores;
+      }
+      
+      // Store the total possible score as well
+      if (!data.totalPossibleScore && data.totalPossibleScore !== 0) {
+        data.totalPossibleScore = data.totalScore || "0.0";
+      }
+      
+      setTableData(data);
+    }
   };
 
   const exportToExcel = () => {
@@ -235,20 +256,27 @@ const SubCompetency = () => {
 
       // Process each row from the table data
       tableData.rows.forEach(row => {
+        // Get the total possible score from the table data
+        const totalPossibleScore = tableData.totalScore || tableData.totalPossibleScore || "0.0";
+        
         const rowData = {
           'S.No': row.sno,
           'Student Name': row.studentName,
           'Unit': row.unit,
           'Department': row.department,
-          'Total Score': row.totalScore
+          // Include the "out of" score in the total score column header, just like in the table
+          [`Total Score (Out of ${totalPossibleScore})`]: row.totalScore
         };
 
-        // Add topic-specific columns
+        // Add topic-specific columns with OUT OF scores
         tableData.topics.forEach(({ topicId, name }) => {
           const topicData = row.topicMap[topicId];
           if (topicData) {
             const abbr = tableData.abbreviations[topicId] || getAbbreviation(name);
-            rowData[`${abbr} - Score`] = topicData.score || '0';
+            // Get the max score for this topic
+            const maxScore = tableData.topicScores ? tableData.topicScores[topicId] || '10' : '10';
+            // Use the exact same format as in the table header
+            rowData[`${abbr} - Score (Out of ${maxScore})`] = topicData.score || '0';
             rowData[`${abbr} - Unit %ile`] = topicData.unitPercentile || '0';
             rowData[`${abbr} - MH %ile`] = topicData.mhPercentile || '0';
           }
@@ -265,11 +293,14 @@ const SubCompetency = () => {
         const worksheet = XLSX.utils.json_to_sheet(flatData);
         console.log('Worksheet created successfully');
 
-        // Add legend data below the main data
-        const legendData = tableData.topics.map(({ topicId, name }) => ({
-          'Abbreviation': tableData.abbreviations[topicId] || getAbbreviation(name),
-          'Full Topic Name': name
-        }));
+        // Add legend data below the main data with OUT OF scores
+        const legendData = tableData.topics.map(({ topicId, name }) => {
+          const maxScore = tableData.topicScores ? tableData.topicScores[topicId] || '10' : '10';
+          return {
+            'Abbreviation': tableData.abbreviations[topicId] || getAbbreviation(name),
+            'Full Topic Name': `${name} (Out of ${maxScore})`
+          };
+        });
 
         // Add a blank row
         XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
@@ -289,15 +320,20 @@ const SubCompetency = () => {
           { wch: 25 },  // Student Name
           { wch: 20 },  // Unit
           { wch: 20 },  // Department
-          { wch: 15 },  // Total Score
+          { wch: 30 },  // Total Score - wider for Out of text
         ];
 
         // Add dynamic column widths for topic-specific columns
         const topicColumns = Object.keys(flatData[0]).filter(key => 
           key.includes('Score') || key.includes('%ile')
         );
-        topicColumns.forEach(() => {
-          columnWidths.push({ wch: 15 });
+        topicColumns.forEach((key) => {
+          // Use wider columns for Score columns that have Out of values
+          if (key.includes('Score')) {
+            columnWidths.push({ wch: 30 }); // Wider to accommodate Out of text
+          } else {
+            columnWidths.push({ wch: 20 }); // Regular width for percentile columns
+          }
         });
 
         worksheet['!cols'] = columnWidths;
