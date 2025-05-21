@@ -3,6 +3,7 @@ import './shared.css';
 import UnitSubCompetencyTable from './UnitSubCompetencyTable';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
+import { saveAs } from 'file-saver';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const SubCompetency = () => {
@@ -17,6 +18,9 @@ const SubCompetency = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [competencies, setCompetencies] = useState([]);
+  const [topicMappings, setTopicMappings] = useState({});
+  const topicMappingsRef = useRef({});
+  const [tableData, setTableData] = useState(null);
   
   // Create refs for the dropdown components to detect clicks outside
   const unitsDropdownRef = useRef(null);
@@ -24,75 +28,41 @@ const SubCompetency = () => {
 
   const fetchCompetencies = async () => {
     try {
-      console.log('\u2139\ufe0f Fetching competencies from API...');
+      console.log('Fetching competencies from API...');
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCompetency`, {});
       
-      // Instead of making a direct call to external API, let's use a fallback approach:
-      // 1. First, log sample data for debugging
-      // 2. Use hardcoded data for now to keep the app working
-      // 3. Add notes for a proper fix
-      
-      console.log('\u2139\ufe0f CORS Error: Unable to fetch from external API directly');
-      console.log('\u2139\ufe0f Using hardcoded data as fallback');
-      
-      // For debug purposes - would log the URL we're trying to access
-      console.log('\u2139\ufe0f Target API URL:', 'https://mhbodhi.medtalent.co/api/reportanalytics/getSubCompetency');
-      
-      // ⚠️ IMPORTANT: In production, this should be handled by:
-      // 1. Setting up a proxy server
-      // 2. Using environment variables for the API URL
-      // 3. Proper error handling
-      
-      // Simulate response with the data structure from the API
-      const sampleData = [
-        {
-          section_name: 'Relationship Building',
-          section_id: '3',
-          quiz_section_id: ['4', '84'],
-          topics: [/* Topics data omitted for brevity */]
-        },
-        {
-          section_name: 'Quality in Healthcare Delivery',
-          section_id: '4',
-          quiz_section_id: ['5', '83'],
-          topics: [/* Topics data omitted for brevity */]
-        },
-        {
-          section_name: 'Situation Management',
-          section_id: '5',
-          quiz_section_id: ['6', '82'],
-          topics: [/* Topics data omitted for brevity */]
-        },
-        {
-          section_name: 'Leadership',
-          section_id: '6',
-          quiz_section_id: ['8', '85'],
-          topics: [/* Topics data omitted for brevity */]
-        }
-      ];
-      
-      console.log('\u2139\ufe0f Using fallback data structure:', sampleData);
-      
-      // Transform the sample data to match our required format
-      const competenciesData = sampleData.map(item => {
-        console.log('\u2139\ufe0f Processing competency:', item.section_name, 'with quiz_section_id:', item.quiz_section_id);
-        return {
+      if (response.data.status === 'success' && Array.isArray(response.data.data)) {
+        const competenciesData = response.data.data.map(item => ({
           name: item.section_name,
-          section_id: item.quiz_section_id[1], // Using the second value from quiz_section_id array
-          section_data: item // Store all data for potential future use
-        };
-      });
-      
-      console.log('\u2705 Competencies loaded from fallback:', competenciesData);
-      setCompetencies(competenciesData);
-      
-      // Add a note about fixing the CORS issue
-      console.log('\u2139\ufe0f DEVELOPER NOTE: To fix the CORS issue permanently:');
-      console.log('\u2139\ufe0f 1. Set up a proxy in your vite.config.js or use a middleware');
-      console.log('\u2139\ufe0f 2. Ensure the server sends proper CORS headers');
-      console.log('\u2139\ufe0f 3. Consider using a relative URL with BASE_URL');
+          section_id: item.quiz_section_id[0],
+          section_data: item
+        }));
+        
+        // Create topic mappings
+        const mappings = {};
+        response.data.data.forEach(section => {
+          if (section.topic_detail) {
+            Object.entries(section.topic_detail).forEach(([topicId, topic]) => {
+              mappings[topicId] = [topic.topic_name, section.section_name];
+              console.log(`Created mapping for topic ${topicId}:`, {
+                name: topic.topic_name,
+                competency: section.section_name
+              });
+            });
+          }
+        });
+        
+        console.log('Created topic mappings:', mappings);
+        setTopicMappings(mappings);
+        topicMappingsRef.current = mappings; // Store in ref
+        
+        console.log('Competencies loaded from API:', competenciesData);
+        setCompetencies(competenciesData);
+      } else {
+        throw new Error('Invalid API response format');
+      }
     } catch (error) {
-      console.error('\u274c Error in fetchCompetencies:', error);
-      console.error('\u274c Error details:', error.message);
+      console.error('Error in fetchCompetencies:', error);
       setError(`Error loading competencies: ${error.message}`);
     }
   };
@@ -216,23 +186,23 @@ const SubCompetency = () => {
 
     try {
       console.log('🌐 Fetching report data from API...');
-      const res = await fetch(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          unit: selectedUnits,
-          section_id: [sectionObj.section_id],
-        }),
+      const requestBody = {
+        unit: selectedUnits,
+        section_id: [sectionObj.section_id]
+      };
+      console.log('Request body:', requestBody);
+
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, requestBody, {
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      const responseData = await res.json();
-      console.log('📦 API response:', responseData);
+      console.log('📦 API response:', response.data);
 
-      if (responseData?.status === 'success') {
-        console.log('✅ Report data received:', responseData.data);
-        setReportData(responseData.data || responseData);
+      if (response.data?.status === 'success') {
+        console.log('✅ Report data received:', response.data.data);
+        setReportData(response.data.data || response.data);
       } else {
-        const msg = responseData?.error || '❌ Invalid data format received';
+        const msg = response.data?.error || '❌ Invalid data format received';
         console.warn(msg);
         setError(msg);
       }
@@ -244,43 +214,168 @@ const SubCompetency = () => {
     }
   };
 
+  const handleTableDataUpdate = (data) => {
+    console.log('Table data updated:', data);
+    setTableData(data);
+  };
+
   const exportToExcel = () => {
-    if (!reportData) return;
+    console.log('Starting export process...');
+    console.log('Current table data:', tableData);
 
-    // Convert reportData to an array of objects
-    const formattedData = Object.keys(reportData).flatMap(unit => {
-      return Object.keys(reportData[unit]).map(subCompetency => {
-        const data = reportData[unit][subCompetency];
-        return { unit, subCompetency, ...data }; // Merge the unit, subCompetency, and actual data
-      });
-    });
-
-    console.log('Formatted data for Excel:', formattedData);
-
-    // Create a worksheet from the formatted data
-    const ws = XLSX.utils.json_to_sheet(formattedData);
-
-    // Apply some styling for the Excel headers (optional)
-    const wscols = [
-      { wpx: 100 },
-      { wpx: 100 }, 
-      { wpx: 100 }, 
-      { wpx: 100 }, 
-      { wpx: 100 }, 
-    ];
-    ws['!cols'] = wscols;
-
-    // Apply green filter to the headers
-    const range = { s: { r: 0, c: 0 }, e: { r: 0, c: wscols.length - 1 } };
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
-      if (!cell) continue;
-      cell.s = { fill: { fgColor: { rgb: '00FF00' } } }; // Set header color to green
+    if (!tableData || !tableData.rows || tableData.rows.length === 0) {
+      console.log('❌ No table data available');
+      setError('No data available to download. Please apply filters first.');
+      return;
     }
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    XLSX.writeFile(wb, 'SubCompetency_Report.xlsx');
+    try {
+      console.log('Starting Excel export with table data');
+      const flatData = [];
+
+      // Process each row from the table data
+      tableData.rows.forEach(row => {
+        const rowData = {
+          'S.No': row.sno,
+          'Student Name': row.studentName,
+          'Unit': row.unit,
+          'Department': row.department,
+          'Total Score': row.totalScore
+        };
+
+        // Add topic-specific columns
+        tableData.topics.forEach(({ topicId, name }) => {
+          const topicData = row.topicMap[topicId];
+          if (topicData) {
+            const abbr = tableData.abbreviations[topicId] || getAbbreviation(name);
+            rowData[`${abbr} - Score`] = topicData.score || '0';
+            rowData[`${abbr} - Unit %ile`] = topicData.unitPercentile || '0';
+            rowData[`${abbr} - MH %ile`] = topicData.mhPercentile || '0';
+          }
+        });
+
+        console.log('Adding row data:', rowData);
+        flatData.push(rowData);
+      });
+
+      console.log('Final processed data for Excel:', flatData);
+
+      try {
+        // Create worksheet
+        const worksheet = XLSX.utils.json_to_sheet(flatData);
+        console.log('Worksheet created successfully');
+
+        // Add legend data below the main data
+        const legendData = tableData.topics.map(({ topicId, name }) => ({
+          'Abbreviation': tableData.abbreviations[topicId] || getAbbreviation(name),
+          'Full Topic Name': name
+        }));
+
+        // Add a blank row
+        XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
+        
+        // Add legend header
+        XLSX.utils.sheet_add_aoa(worksheet, [['Legend:']], { origin: 'A' + (flatData.length + 3) });
+        
+        // Add legend data
+        legendData.forEach((item, index) => {
+          XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Topic Name']}`]], 
+            { origin: 'A' + (flatData.length + 4 + index) });
+        });
+
+        // Set column widths and alignment
+        const columnWidths = [
+          { wch: 10 },  // S.No
+          { wch: 25 },  // Student Name
+          { wch: 20 },  // Unit
+          { wch: 20 },  // Department
+          { wch: 15 },  // Total Score
+        ];
+
+        // Add dynamic column widths for topic-specific columns
+        const topicColumns = Object.keys(flatData[0]).filter(key => 
+          key.includes('Score') || key.includes('%ile')
+        );
+        topicColumns.forEach(() => {
+          columnWidths.push({ wch: 15 });
+        });
+
+        worksheet['!cols'] = columnWidths;
+
+        // Set cell alignment for all cells
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          for (let C = range.s.c; C <= range.e.c; C++) {
+            const cell_address = { c: C, r: R };
+            const cell_ref = XLSX.utils.encode_cell(cell_address);
+            if (!worksheet[cell_ref]) continue;
+            
+            // Set alignment for all cells
+            worksheet[cell_ref].s = {
+              alignment: {
+                horizontal: 'left',
+                vertical: 'center'
+              }
+            };
+          }
+        }
+
+        // Create workbook and append worksheet
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'UserWiseSubCompetency');
+        console.log('Workbook created successfully');
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        console.log('Excel buffer generated successfully');
+
+        // Create blob
+        const blob = new Blob([excelBuffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        console.log('Blob created successfully');
+
+        // Save file
+        const fileName = `UserWiseSubCompetency_Report_${selectedCompetency}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        console.log('Attempting to save file:', fileName);
+        
+        // Try using saveAs directly
+        try {
+          saveAs(blob, fileName);
+          console.log('File saved successfully using saveAs');
+        } catch (saveError) {
+          console.error('Error using saveAs:', saveError);
+          
+          // Fallback method using URL.createObjectURL
+          try {
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            console.log('File saved successfully using URL.createObjectURL');
+          } catch (urlError) {
+            console.error('Error using URL.createObjectURL:', urlError);
+            throw new Error('Failed to save file using both methods');
+          }
+        }
+      } catch (excelError) {
+        console.error('Error in Excel generation:', excelError);
+        throw new Error('Failed to generate Excel file');
+      }
+    } catch (error) {
+      console.error('❌ Error in export process:', error);
+      setError(`Error generating Excel file: ${error.message}`);
+    }
+  };
+
+  // Helper function to generate abbreviation from topic name
+  const getAbbreviation = (topicName) => {
+    const words = topicName.split(/[ \/]+/);
+    return words.map(word => word.charAt(0).toUpperCase()).join('');
   };
 
   if (isLoading) {
@@ -315,7 +410,7 @@ const SubCompetency = () => {
           </div>
           {showUnitsDropdown && (
             <div className="dropdown-menu">
-              <label className="dropdown-item">
+              <label key="select-all" className="dropdown-item">
                 <input
                   type="checkbox"
                   checked={selectedUnits.length === units.length}
@@ -350,7 +445,7 @@ const SubCompetency = () => {
           {showCompetencyDropdown && (
             <div className="dropdown-menu">
               {competencies.map((comp) => (
-                <label key={comp.section_id} className="dropdown-item">
+                <label key={`${comp.section_id}-${comp.name}`} className="dropdown-item">
                   <input
                     type="radio"
                     name="competency"
@@ -403,6 +498,7 @@ const SubCompetency = () => {
               data={reportData} 
               selectedCompetency={selectedCompetency}
               searchTerm={searchTerm}
+              onDataUpdate={handleTableDataUpdate}
             />
           ) : (
             <div className="no-filters-message">

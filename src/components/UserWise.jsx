@@ -4,6 +4,7 @@ import axios from 'axios';
 import CompetencyTable from './CompetencyTable';
 import * as XLSX from 'xlsx';
 import { ClipLoader } from 'react-spinners'; // Import spinner component (if using `react-spinners`)
+import { saveAs } from 'file-saver';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const UserWise = () => {
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -19,6 +20,7 @@ const UserWise = () => {
   const [isZoomed, setIsZoomed] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasStudentNames, setHasStudentNames] = useState(false);
+  const [tableData, setTableData] = useState(null);
   
   // Create refs for the dropdown components to detect clicks outside
   const unitsDropdownRef = useRef(null);
@@ -175,124 +177,214 @@ const UserWise = () => {
     setReportData(null);
   };
 
+  const handleTableDataUpdate = (data) => {
+    console.log('Table data updated:', data);
+    setTableData(data);
+  };
+
   const handleExport = () => {
-    if (!reportData || !reportData.data) {
-      alert('No data available to export.');
+    console.log('Starting export process...');
+    console.log('Current table data:', tableData);
+
+    if (!tableData || !tableData.rows || tableData.rows.length === 0) {
+      console.log('❌ No table data available');
+      setError('No data available to download. Please apply filters first.');
       return;
     }
 
-    // Create a function to generate abbreviation from section name
-    const getAbbreviation = (sectionName) => {
-      // Split section name by spaces or forward slashes
-      const words = sectionName.split(/[ \/]+/);
-      // Create abbreviation from first letter of each word
-      return words.map(word => word.charAt(0).toUpperCase()).join('');
-    };
+    try {
+      console.log('Starting Excel export with table data');
+      const flatData = [];
 
-    // Map to store competency abbreviations - will be used for the legend
-    const competencyAbbreviations = {};
+      // Process each row from the table data
+      tableData.rows.forEach(row => {
+        const rowData = {
+          'Student Name': row.studentName,
+          'Units': Array.from(row.units).join(', '),
+          'Department': row.department,
+          'Total Score': row.totalScore.toFixed(2)
+        };
 
-    const data = reportData.data;
-    const mergedStudentDataMap = new Map(); // To merge data for same student ID
-
-    Object.entries(data).forEach(([unitKey, unitData]) => {
-      const quizDetails = unitData.quiz_detail || {};
-
-      Object.entries(quizDetails).forEach(([quizId, studentsInQuiz]) => {
-        Object.entries(studentsInQuiz).forEach(([studentId, studentData]) => {
-          const userDetails = studentData.user_basic_detail || {};
-          const studentName = userDetails.student_name || '-';
-          const unitName = userDetails.unit_name || unitKey;
-          const department = userDetails.department || '-';
-          const totalScore = studentData.total_score?.[quizId] || '-';
-          const leadershipInitialScore = studentData.leadership_initial_score || '-';
-
-          const quizData = studentData.quiz_detail?.[quizId];
-          const sectionDetail = quizData?.section_detail || {};
-
-          // Create or update student record in mergedStudentDataMap
-          if (!mergedStudentDataMap.has(studentId)) {
-            mergedStudentDataMap.set(studentId, {
-              'Student ID': studentId,
-              'Student Name': studentName,
-              'Department': department,
-              'Leadership Initial Score': leadershipInitialScore,
-              'Units': new Set([unitName]),
-              'Scores': {}
-            });
-          } else {
-            const existingRecord = mergedStudentDataMap.get(studentId);
-            existingRecord.Units.add(unitName);
+        // Add competency-specific columns
+        tableData.sections.forEach(({ id, abbreviation }) => {
+          const sectionData = row.sectionDetail[id];
+          if (sectionData) {
+            rowData[`${abbreviation} - Score`] = sectionData.calculated_score || '0';
+            rowData[`${abbreviation} - MH %ile`] = sectionData.section_percentile_score || '0';
+            rowData[`${abbreviation} - Unit %ile`] = sectionData.unit_section_percentile_score || '0';
           }
-
-          // Add competency scores with abbreviations
-          const studentRecord = mergedStudentDataMap.get(studentId);
-          Object.values(sectionDetail).forEach((section) => {
-            const sectionName = section.section_name;
-            // Generate abbreviation and store in the map
-            const abbr = getAbbreviation(sectionName);
-            competencyAbbreviations[abbr] = sectionName;
-            
-            // Use abbreviations instead of full section names
-            studentRecord.Scores[`${abbr} - Score`] = section.section_total_score;
-            studentRecord.Scores[`${abbr} - MH %ile`] = section.section_percentile_score;
-            studentRecord.Scores[`${abbr} - Unit %ile`] = section.unit_section_percentile_score;
-          });
         });
+
+        console.log('Adding row data:', rowData);
+        flatData.push(rowData);
       });
-    });
 
-    // Convert Map to array and format for Excel
-    const rows = Array.from(mergedStudentDataMap.values()).map(record => ({
-      'Student ID': record['Student ID'],
-      'Student Name': record['Student Name'],
-      'Department': record['Department'],
-      'Leadership Initial Score': record['Leadership Initial Score'],
-      'Units': Array.from(record.Units).join(', '),
-      ...record.Scores
-    }));
+      console.log('Final processed data for Excel:', flatData);
 
-    if (rows.length === 0) {
-      alert('No processed data to export.');
-      return;
+      try {
+        // Create worksheet for main data
+        const worksheet = XLSX.utils.json_to_sheet(flatData);
+        console.log('Worksheet created successfully');
+
+        // Add legend data below the main data
+        const legendData = tableData.sections.map(({ abbreviation, name }) => ({
+          'Abbreviation': abbreviation,
+          'Full Competency Name': name
+        }));
+
+        // Add a blank row
+        XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
+        
+        // Add legend header
+        XLSX.utils.sheet_add_aoa(worksheet, [['Legend:']], { origin: 'A' + (flatData.length + 3) });
+        
+        // Add legend data
+        legendData.forEach((item, index) => {
+          XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
+            { origin: 'A' + (flatData.length + 4 + index) });
+        });
+
+        // Set column widths for main data
+        const columnWidths = [
+          { wch: 25 },  // Student Name
+          { wch: 30 },  // Units
+          { wch: 20 },  // Department
+          { wch: 15 },  // Total Score
+        ];
+
+        // Add dynamic column widths for competency-specific columns
+        const competencyColumns = Object.keys(flatData[0]).filter(key => 
+          key.includes('Score') || key.includes('%ile')
+        );
+        competencyColumns.forEach(() => {
+          columnWidths.push({ wch: 15 });
+        });
+
+        worksheet['!cols'] = columnWidths;
+
+        // Create workbook and append worksheet
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'UserWise Main Competency Report');
+        console.log('Workbook created successfully');
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        console.log('Excel buffer generated successfully');
+
+        // Create blob
+        const blob = new Blob([excelBuffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        console.log('Blob created successfully');
+
+        // Save file
+        const fileName = `UserWise_Main_Competency_Report_${selectedTest}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        console.log('Attempting to save file:', fileName);
+        
+        // Try using saveAs directly
+        try {
+          saveAs(blob, fileName);
+          console.log('File saved successfully using saveAs');
+        } catch (saveError) {
+          console.error('Error using saveAs:', saveError);
+          
+          // Fallback method using URL.createObjectURL
+          try {
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            console.log('File saved successfully using URL.createObjectURL');
+          } catch (urlError) {
+            console.error('Error using URL.createObjectURL:', urlError);
+            throw new Error('Failed to save file using both methods');
+          }
+        }
+      } catch (excelError) {
+        console.error('Error in Excel generation:', excelError);
+        throw new Error('Failed to generate Excel file');
+      }
+    } catch (error) {
+      console.error('❌ Error in export process:', error);
+      setError(`Error generating Excel file: ${error.message}`);
     }
-
-    // Create the worksheet for user data
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    
-    // Create a workbook
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'UserWise Report');
-
-    // Create a legend/key worksheet
-    const legendRows = Object.entries(competencyAbbreviations).map(([abbr, fullName]) => ({
-      'Abbreviation': abbr,
-      'Full Competency Name': fullName
-    }));
-
-    if (legendRows.length > 0) {
-      const legendWorksheet = XLSX.utils.json_to_sheet(legendRows);
-      XLSX.utils.book_append_sheet(workbook, legendWorksheet, 'Legend');
-      
-      // Add a note about the legend to the main worksheet
-      const legendNote = 'Note: See the "Legend" sheet for full competency names';
-      XLSX.utils.sheet_add_aoa(worksheet, [[legendNote]], { origin: 'A' + (rows.length + 2) });
-    }
-
-    // Write to file with both sheets
-    XLSX.writeFile(workbook, 'UserWise_Main_Competency_Report.xlsx');
-    
-    console.log('✅ Export completed with abbreviated column names and legend');
-    console.log('✅ Legend shows these abbreviations:', competencyAbbreviations);
   };
 
   const toggleZoom = () => {
     setIsZoomed(!isZoomed);
   };
 
+  const calculateTotalScore = (sectionId) => {
+    if (!reportData?.data) return 0;
+
+    // If no sectionId is provided, calculate total possible score for all sections
+    if (!sectionId) {
+      let totalScore = 0;
+      for (const unitId in reportData.data) {
+        const unit = reportData.data[unitId];
+        if (!unit.quiz_detail) continue;
+
+        for (const quizId in unit.quiz_detail) {
+          const quiz = unit.quiz_detail[quizId];
+          if (!quiz) continue;
+
+          for (const studentId in quiz) {
+            const studentData = quiz[studentId];
+            if (!studentData?.quiz_detail?.[quizId]?.section_detail) continue;
+
+            const sectionDetail = studentData.quiz_detail[quizId].section_detail;
+            for (const sid in sectionDetail) {
+              const section = sectionDetail[sid];
+              // Just use correct_marks as the total score
+              if (section.correct_marks) {
+                const correctMarks = parseFloat(section.correct_marks);
+                if (!isNaN(correctMarks)) {
+                  totalScore += correctMarks;
+                }
+              }
+            }
+          }
+        }
+      }
+      console.log('Total Possible Score:', totalScore);
+      return totalScore.toFixed(1);
+    }
+
+    // Calculate score for specific section
+    for (const unitId in reportData.data) {
+      const unit = reportData.data[unitId];
+      if (!unit.quiz_detail) continue;
+
+      for (const quizId in unit.quiz_detail) {
+        const quiz = unit.quiz_detail[quizId];
+        if (!quiz) continue;
+
+        for (const studentId in quiz) {
+          const studentData = quiz[studentId];
+          if (!studentData?.quiz_detail?.[quizId]?.section_detail?.[sectionId]) continue;
+
+          const section = studentData.quiz_detail[quizId].section_detail[sectionId];
+          // Just use correct_marks as the total score
+          if (section.correct_marks) {
+            const correctMarks = parseFloat(section.correct_marks);
+            if (!isNaN(correctMarks)) {
+              return correctMarks.toFixed(1);
+            }
+          }
+        }
+      }
+    }
+
+    return 0;
+  };
+
   return (
-    <div className="performance-reports">
-      <h1>Performance Reports</h1>
+    <div className="userwise-container">
+      <h1 style={{color:'blue', fontSize:'20px', fontWeight:'bold',marginBottom:'10px'}}>Performance Report</h1>
 
       <div className="filters-row">
         {/* Units Filter */}
@@ -380,25 +472,27 @@ const UserWise = () => {
 
         <div className="report-data">
           {loading ? (
-            <div className="loading-message" style={{ textAlign: 'center', padding: '20px' }}>
-              <ClipLoader size={40} color={"#3498db"} loading={loading} />
-              <p>Loading report...</p>
+            <div className="loading-container">
+              <ClipLoader color="#4A90E2" loading={loading} size={50} />
+              <p>Loading data...</p>
             </div>
           ) : error ? (
-            <div className="error-message" style={{ textAlign: 'center', padding: '20px', color: 'red' }}>
-              {error}
-            </div>
-          ) : reportData && reportData.data && typeof reportData.data === 'object' && Object.keys(reportData.data).length > 0 ? (
-            <div className={`results-content ${isZoomed ? 'zoomed' : ''}`}>
-              <CompetencyTable data={reportData.data} searchTerm={searchTerm} />
+            <div className="error-message">{error}</div>
+          ) : reportData && reportData.data ? (
+            <div className="table-wrapper">
+              <CompetencyTable 
+                data={reportData.data} 
+                searchTerm={searchTerm}
+                selectedQuizId={selectedQuizId}
+                onDataUpdate={handleTableDataUpdate}
+              />
             </div>
           ) : (
-            <p className="no-data-message" style={{ textAlign: 'center', padding: '20px' }}>
-              {/* Message depends on whether filters were actively applied or it's an initial/cleared state */}
-              {(selectedUnits.length > 0 || selectedTest) && !error 
-                ? 'No data found for the selected filters. Please adjust your selections or try again.'
-                : 'Please select units and tests, then click "Apply Filters" to view the report.'}
-            </p>
+            <div className="no-data-message">
+              {selectedUnits.length === 0 || !selectedQuizId 
+                ? 'Please select unit(s) and a test to view data.'
+                : 'No data available for the selected filters.'}
+            </div>
           )}
         </div>
       </div>

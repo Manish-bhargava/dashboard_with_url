@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -19,6 +19,7 @@ const MainCompetency = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [error, setError] = useState(null);
+  const [tableData, setTableData] = useState(null);
   
   // Create refs for the dropdown components to detect clicks outside
   const unitsDropdownRef = useRef(null);
@@ -136,23 +137,155 @@ const MainCompetency = () => {
     }
   };
 
+  const handleTableDataUpdate = useCallback((data) => {
+    console.log('Received table data update:', data);
+    if (data && data.rows && data.rows.length > 0) {
+      setTableData(data);
+    }
+  }, []); // Remove tableData from dependencies to prevent update loop
+
   const handleDownloadExcel = () => {
-    if (!reportData) {
-      alert('No data available to download.');
+    console.log('Current tableData state:', tableData);
+    
+    if (!tableData || !tableData.rows || tableData.rows.length === 0) {
+      console.log('No data available for download. TableData:', tableData);
+      alert('No data available to download. Please wait for the table to load completely.');
       return;
     }
 
     try {
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([]);
-      XLSX.utils.book_append_sheet(wb, ws, 'Report');
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(data, 'main_competency_report.xlsx');
+      console.log('Processing table data for Excel:', tableData);
+
+      // Process the data for Excel using the table's data
+      const flatData = tableData.rows.map((row, index) => {
+        const rowData = {
+          'S.No': index + 1,
+          'Unit': row.unitName,
+          'Total Score': row.totalScore
+        };
+
+        // Add competency scores and percentiles
+        Object.entries(row.competencies).forEach(([competencyName, data]) => {
+          const section = tableData.sections.find(s => s.name === competencyName);
+          if (section) {
+            rowData[`${section.abbreviation} - Score`] = data.avg;
+            rowData[`${section.abbreviation} - MH %ile`] = data.percentile;
+          }
+        });
+
+        return rowData;
+      });
+
+      console.log('Processed Excel data:', flatData);
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(flatData);
+
+      // Add legend data below the main data
+      const legendData = tableData.sections.map(section => ({
+        'Abbreviation': section.abbreviation,
+        'Full Competency Name': section.name
+      }));
+
+      // Add a blank row
+      XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
+      
+      // Add legend header
+      XLSX.utils.sheet_add_aoa(worksheet, [['Legend:']], { origin: 'A' + (flatData.length + 3) });
+      
+      // Add legend data
+      legendData.forEach((item, index) => {
+        XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
+          { origin: 'A' + (flatData.length + 4 + index) });
+      });
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 10 },  // S.No
+        { wch: 20 },  // Unit
+        { wch: 15 },  // Total Score
+      ];
+
+      // Add dynamic column widths for section-specific columns
+      const sectionColumns = Object.keys(flatData[0]).filter(key => 
+        key.includes('Score') || key.includes('%ile')
+      );
+      sectionColumns.forEach(() => {
+        columnWidths.push({ wch: 15 });
+      });
+
+      worksheet['!cols'] = columnWidths;
+
+      // Set cell alignment for all cells
+      const range = XLSX.utils.decode_range(worksheet['!ref']);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cell_address = { c: C, r: R };
+          const cell_ref = XLSX.utils.encode_cell(cell_address);
+          if (!worksheet[cell_ref]) continue;
+          
+          // Set alignment for all cells
+          worksheet[cell_ref].s = {
+            alignment: {
+              horizontal: 'left',
+              vertical: 'center'
+            }
+          };
+        }
+      }
+
+      // Create workbook and append worksheet
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'UnitWiseMainCompetencyReport');
+      console.log('Workbook created successfully');
+
+      // Generate Excel file
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      console.log('Excel buffer generated successfully');
+
+      // Create blob
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      console.log('Blob created successfully');
+
+      // Save file
+      const fileName = `UnitWiseMainCompetencyReport_${selectedTest}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      console.log('Attempting to save file:', fileName);
+      
+      // Try using saveAs directly
+      try {
+        saveAs(blob, fileName);
+        console.log('File saved successfully using saveAs');
+      } catch (saveError) {
+        console.error('Error using saveAs:', saveError);
+        
+        // Fallback method using URL.createObjectURL
+        try {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          console.log('File saved successfully using URL.createObjectURL');
+        } catch (urlError) {
+          console.error('Error using URL.createObjectURL:', urlError);
+          throw new Error('Failed to save file using both methods');
+        }
+      }
     } catch (err) {
       console.error('Error downloading Excel:', err);
       alert('Error downloading Excel file. Please try again.');
     }
+  };
+
+  // Helper function to generate abbreviation from section name
+  const getAbbreviation = (sectionName) => {
+    const words = sectionName.split(/[ \/]+/);
+    return words.map(word => word.charAt(0).toUpperCase()).join('');
   };
 
   const handleSearchChange = (value) => {
@@ -265,6 +398,7 @@ const MainCompetency = () => {
               units={selectedUnits} 
               quizId={selectedTest ? quizList.find(q => q.quiz_name === selectedTest)?.quiz_id : null}
               reportData={reportData}
+              onDataUpdate={handleTableDataUpdate}
             />
           </div>
         ) : (

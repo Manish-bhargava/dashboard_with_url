@@ -1,52 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import './CompetencyTable.css';
 
-const topicIdToSubCompetencyMap = {
-  14: ['Situational Awareness', 'Situation Management'],
-  15: ['Swiftness/Timeliness of Response', 'Situation Management'],
-  16: ['Emotional Balance', 'Situation Management'],
-  17: ['Stress Handling Capacity', 'Situation Management'],
-
-  3: ['Communication', 'Relationship Building'],
-  4: ['Team work/Collaboration', 'Relationship Building'],
-  7: ['People Handling', 'Relationship Building'],
-  8: ['Openness to Change', 'Relationship Building'],
-  9: ['Accepting Suggestions/Criticism', 'Relationship Building'],
-  10: ['High Tolerance Levels', 'Relationship Building'],
-
-  5: ['Work Ethic', 'Quality in Healthcare Delivery'],
-  6: ['Empathy', 'Quality in Healthcare Delivery'],
-  11: ['Assertiveness', 'Quality in Healthcare Delivery'],
-  12: ['Critical Thinking', 'Quality in Healthcare Delivery'],
-  13: ['Willingness to Learn', 'Quality in Healthcare Delivery'],
-
-  18: ['Mentoring', 'Leadership'],
-  19: ['Taking Initiative', 'Leadership'],
-  20: ['Conflict Management', 'Leadership'],
-  21: ['Ambition', 'Leadership'],
-};
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Generate abbreviation from competency name
 const getAbbreviation = (topicName) => {
-  // Split topic name by spaces or forward slashes
   const words = topicName.split(/[ \/]+/);
-  // Create abbreviation from first letter of each word
   return words.map(word => word.charAt(0).toUpperCase()).join('');
 };
-
-// Create abbreviation map for topics
-const topicAbbreviations = {};
-Object.entries(topicIdToSubCompetencyMap).forEach(([id, [name]]) => {
-  topicAbbreviations[id] = getAbbreviation(name);
-});
 
 const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({
     key: null,
-    direction: 'none' // 'none', 'asc', 'desc'
+    direction: 'none'
   });
+  const [topicMappings, setTopicMappings] = useState({});
+  const [topicAbbreviations, setTopicAbbreviations] = useState({});
+  const [error, setError] = useState(null);
   
+  // Fetch topic mappings from API
+  useEffect(() => {
+    const fetchTopicMappings = async () => {
+      try {
+        console.log('Fetching topic mappings from API...');
+        const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCompetency`, {});
+        
+        if (response.data.status === 'success' && Array.isArray(response.data.data)) {
+          const mappings = {};
+          const abbreviations = {};
+          
+          response.data.data.forEach(section => {
+            if (section.topics && Array.isArray(section.topics)) {
+              section.topics.forEach(topic => {
+                if (topic.topic_id && topic.topic_name) {
+                  mappings[topic.topic_id] = [topic.topic_name, section.section_name];
+                  abbreviations[topic.topic_id] = getAbbreviation(topic.topic_name);
+                }
+              });
+            }
+          });
+          
+          console.log('Generated topic mappings:', mappings);
+          console.log('Generated abbreviations:', abbreviations);
+          
+          setTopicMappings(mappings);
+          setTopicAbbreviations(abbreviations);
+        } else {
+          throw new Error('Invalid API response format');
+        }
+      } catch (error) {
+        console.error('Error fetching topic mappings:', error);
+        setError('Failed to load topic mappings');
+      }
+    };
+
+    fetchTopicMappings();
+  }, []);
+
   const reportData = data?.data || data;
 
   console.log('Initial Data:', data);
@@ -63,11 +75,15 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
     );
   }
 
+  if (error) {
+    return <div className="error-message">{error}</div>;
+  }
+
   if (!reportData || typeof reportData !== 'object') {
     return <div className="no-data">No data available for selected filters.</div>;
   }
 
-  const relevantTopics = Object.entries(topicIdToSubCompetencyMap)
+  const relevantTopics = Object.entries(topicMappings)
     .filter(([, [, comp]]) => comp === selectedCompetency)
     .map(([topicId, [name]]) => ({ topicId, name }));
 
@@ -106,13 +122,13 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
         // Debug log for all topics
         console.log('Topic Data:', {
           topicId,
-          topicName: topicIdToSubCompetencyMap[topicId]?.[0],
-          competency: topicIdToSubCompetencyMap[topicId]?.[1],
+          topicName: topicMappings[topicId]?.[0],
+          competency: topicMappings[topicId]?.[1],
           selectedCompetency,
           topicData: topic
         });
 
-        if (topicIdToSubCompetencyMap[topicId] && topicIdToSubCompetencyMap[topicId][1] === selectedCompetency) {
+        if (topicMappings[topicId] && topicMappings[topicId][1] === selectedCompetency) {
           if (!topicStats[topicId]) {
             topicStats[topicId] = {
               scoreSum: 0,
@@ -122,7 +138,7 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
           }
 
           // Debug log for communication
-          if (topicIdToSubCompetencyMap[topicId][0] === 'Communication') {
+          if (topicMappings[topicId][0] === 'Communication') {
             console.log('Communication Topic Data:', {
               topicId,
               topic,
@@ -254,91 +270,191 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
   };
 
   // Process and sort data
-  const processedAndSortedData = [...Object.values(unitMap)].map((item, index) => ({
+  const processedData = [...Object.values(unitMap)].map((item, index) => ({
     ...item,
     sno: index + 1
   }));
 
-  console.log('Processed Data:', processedAndSortedData);
+  console.log('Processed Data:', processedData);
 
-  // Filter data based on search term
-  const filteredData = processedAndSortedData.filter(item => {
-    if (!searchTerm) return true;
+  const filteredData = useMemo(() => {
+    console.log('Filtering data with search term:', searchTerm);
+    if (!searchTerm) return processedData;
+
     const searchLower = searchTerm.toLowerCase();
-    const matches = item.unitName?.toLowerCase().includes(searchLower);
-    console.log('Search filter:', { unitName: item.unitName, searchTerm, matches });
-    return matches;
-  });
+    return processedData.filter(row => {
+      // Search in unit name
+      if (row.unitName?.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+
+      // Search in competency scores and percentiles
+      return row.subCompetencyStats.some(stat => {
+        const statName = stat.name?.toLowerCase() || '';
+        const statScore = String(stat.unitAvgScore || '').toLowerCase();
+        const statPercentile = String(stat.mhPercentile || '').toLowerCase();
+        
+        return statName.includes(searchLower) || 
+               statScore.includes(searchLower) || 
+               statPercentile.includes(searchLower);
+      });
+    });
+  }, [processedData, searchTerm]);
 
   console.log('Filtered Data:', filteredData);
 
-  // Sort the filtered data
-  const sortedData = [...filteredData].sort((a, b) => {
+  const sortedData = useMemo(() => {
     if (sortConfig.direction === 'none') {
-      console.log('No sorting direction, returning 0');
-      return 0;
+      console.log('No sorting direction, returning filtered data');
+      return filteredData;
     }
 
-    const aValue = getSortableValue(a, sortConfig.key);
-    const bValue = getSortableValue(b, sortConfig.key);
+    return [...filteredData].sort((a, b) => {
+      const aValue = getSortableValue(a, sortConfig.key);
+      const bValue = getSortableValue(b, sortConfig.key);
 
-    console.log('Sorting values:', {
-      key: sortConfig.key,
-      direction: sortConfig.direction,
-      aValue,
-      bValue
-    });
+      console.log('Sorting values:', {
+        key: sortConfig.key,
+        direction: sortConfig.direction,
+        aValue,
+        bValue
+      });
 
-    // Handle string comparison for text fields
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      // Handle string comparison for text fields
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const result = sortConfig.direction === 'asc' ? 
+          aValue.localeCompare(bValue) : 
+          bValue.localeCompare(aValue);
+        console.log('String comparison result:', result);
+        return result;
+      }
+
+      // Handle numeric comparison for scores and percentiles
       const result = sortConfig.direction === 'asc' ? 
-        aValue.localeCompare(bValue) : 
-        bValue.localeCompare(aValue);
-      console.log('String comparison result:', result);
+        aValue - bValue : 
+        bValue - aValue;
+      console.log('Numeric comparison result:', result);
       return result;
-    }
-
-    // Handle numeric comparison for scores and percentiles
-    const result = sortConfig.direction === 'asc' ? 
-      aValue - bValue : 
-      bValue - aValue;
-    console.log('Numeric comparison result:', result);
-    return result;
-  });
+    });
+  }, [filteredData, sortConfig]);
 
   console.log('Final Sorted Data:', sortedData);
 
   const calculateTotalScore = (topicId) => {
-    // Find the section that contains this topic
-    const section = Object.values(reportData).find(unit => 
-      Object.values(unit).find(section => {
-        const topic = section.topic_detail?.[topicId];
-        return topic && section.section_detail;
-      })
-    );
+    console.log('Calculating score for topicId:', topicId);
+    console.log('Report Data:', reportData);
 
-    if (!section) return 0;
+    if (!reportData) {
+      console.log('No report data available');
+      return 0;
+    }
 
-    // Get the first section that contains the topic
-    const sectionData = Object.values(section).find(s => 
-      s.topic_detail?.[topicId] && s.section_detail
-    );
+    // Get the first unit's data
+    const firstUnit = Object.values(reportData)[0];
+    console.log('First Unit:', firstUnit);
+    
+    if (!firstUnit) {
+      console.log('No unit data found');
+      return 0;
+    }
 
-    if (!sectionData) return 0;
+    // Get the first user's data
+    const firstUser = Object.values(firstUnit)[0];
+    console.log('First User:', firstUser);
+    
+    if (!firstUser?.topic_detail) {
+      console.log('No topic detail found');
+      return 0;
+    }
 
-    const topic = sectionData.topic_detail[topicId];
-    const correctMarks = parseFloat(sectionData.section_detail.correct_marks || 0);
-    const totalQuestions = parseFloat(topic.topic_total_question || 0);
+    console.log('User topic_detail:', firstUser.topic_detail);
+    
+    // Get the topic data directly from user's topic_detail
+    const topic = firstUser.topic_detail[topicId];
+    if (topic) {
+      console.log('Found topic:', topic);
+      
+      // Get the section data for correct_marks
+      const sectionDetail = firstUser.section_detail;
+      console.log('Section detail:', sectionDetail);
+      
+      if (sectionDetail) {
+        // Get correct_marks directly from section_detail
+        const correctMarks = parseFloat(sectionDetail.correct_marks || 0);
+        // Get total_questions from topic
+        const totalQuestions = parseFloat(topic.topic_total_question || 0);
+        
+        console.log('Score calculation details:', {
+          correctMarks,
+          totalQuestions,
+          topicId,
+          sectionId: sectionDetail.section_id,
+          sectionName: sectionDetail.section_name,
+          quizSectionId: sectionDetail.quiz_section_id,
+          topicData: topic
+        });
+        
+        if (!isNaN(correctMarks) && !isNaN(totalQuestions)) {
+          // Multiply topic_total_question by correct_marks to get total possible marks
+          const totalPossibleMarks = correctMarks * totalQuestions;
+          console.log('Total possible marks calculation:', {
+            correctMarks,
+            totalQuestions,
+            totalPossibleMarks
+          });
+          return totalPossibleMarks.toFixed(1);
+        }
+      }
+    }
 
-    return (totalQuestions * correctMarks).toFixed(1);
+    console.log('No score found for topic', topicId);
+    return 0;
   };
+
+  // Add this function to get the actual score for a topic
+  const getTopicScore = (topicId) => {
+    if (!reportData) return 0;
+    
+    const firstUnit = Object.values(reportData)[0];
+    if (!firstUnit) return 0;
+    
+    const firstUser = Object.values(firstUnit)[0];
+    if (!firstUser?.topic_detail) return 0;
+    
+    const topic = firstUser.topic_detail[topicId];
+    if (topic) {
+      return parseFloat(topic.unit_topic_score_average || 0).toFixed(1);
+    }
+    
+    return 0;
+  };
+
+  // Add this useEffect for debugging
+  useEffect(() => {
+    const firstUnit = reportData ? Object.values(reportData)[0] : null;
+    const firstUser = firstUnit ? Object.values(firstUnit)[0] : null;
+    const firstSection = firstUser?.section_detail ? Object.values(firstUser.section_detail)[0] : null;
+    
+    console.log('Component Data:', {
+      reportData,
+      relevantTopics,
+      topicMappings,
+      firstUnit,
+      firstUser,
+      topicDetail: firstUser?.topic_detail,
+      sectionDetail: firstUser?.section_detail,
+      firstSection,
+      correctMarks: firstSection?.correct_marks,
+      firstTopic: firstUser?.topic_detail ? Object.values(firstUser.topic_detail)[0] : null
+    });
+  }, [reportData, relevantTopics, topicMappings]);
 
   return (
     <div className="table-container">
       <div className="search-container">
         <input
           type="text"
-          placeholder="Search by unit..."
+          placeholder="Search by unit, competency, score, or percentile..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="search-input"
@@ -377,13 +493,14 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
             </th>
             {relevantTopics.map(({ topicId, name }) => {
               const abbr = topicAbbreviations[topicId];
+              const totalScore = calculateTotalScore(topicId);
               return (
                 <React.Fragment key={name}>
                   <th 
                     className="sortable-header"
                     onClick={() => handleSort(`${name}_score`)}
                   >
-                    {abbr} - Avg Score (Out of {calculateTotalScore(topicId)})
+                    {abbr} - Score (Out of {totalScore})
                     <span className="sort-arrows">
                       {getSortIcon(`${name}_score`)}
                     </span>
@@ -405,7 +522,7 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
         <tbody>
           {sortedData.length === 0 ? (
             <tr>
-              <td colSpan={2 + relevantTopics.length * 2}>
+              <td colSpan={2 + relevantTopics.length * 2} className="no-data-message">
                 No data available for the search term '{searchTerm}'
               </td>
             </tr>

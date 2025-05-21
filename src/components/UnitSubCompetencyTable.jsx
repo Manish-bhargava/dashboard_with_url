@@ -1,79 +1,81 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios';
 import './CompetencyTable.css';
 
-const topicIdToSubCompetencyMap = {
-  // Situation Management
-  14: ['Situational Awareness', 'Situation Management'],
-  15: ['Swiftness/Timeliness of Response', 'Situation Management'],
-  16: ['Emotional Balance', 'Situation Management'],
-  17: ['Stress Handling Capacity', 'Situation Management'],
-
-  // Relationship Building
-  3: ['Effective Communication', 'Relationship Building'],
-  4: ['Teamwork/Collaboration', 'Relationship Building'],
-  7: ['People Handling', 'Relationship Building'],
-  8: ['Openness to Change', 'Relationship Building'],
-  9: ['Accepting Suggestions/Criticism', 'Relationship Building'],
-  10: ['High Tolerance Levels', 'Relationship Building'],
-
-  // Quality in Healthcare Delivery
-  5: ['Work Ethic', 'Quality in Healthcare Delivery'],
-  6: ['Empathy Towards Patients and Relatives', 'Quality in Healthcare Delivery'],
-  11: ['Assertiveness', 'Quality in Healthcare Delivery'],
-  12: ['Critical Thinking', 'Quality in Healthcare Delivery'],
-  13: ['Willingness to Learn', 'Quality in Healthcare Delivery'],
-
-  // Leadership
-  18: ['Mentoring', 'Leadership'],
-  19: ['Taking Initiative', 'Leadership'],
-  20: ['Conflict Management', 'Leadership'],
-  21: ['Ambition', 'Leadership'],
-};
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Generate abbreviation from competency name
 const getAbbreviation = (topicName) => {
-  // Split topic name by spaces or forward slashes
   const words = topicName.split(/[ \/]+/);
-  // Create abbreviation from first letter of each word
   return words.map(word => word.charAt(0).toUpperCase()).join('');
 };
 
-// Create abbreviation map for topics
-const topicAbbreviations = {};
-Object.entries(topicIdToSubCompetencyMap).forEach(([id, [name]]) => {
-  topicAbbreviations[id] = getAbbreviation(name);
-});
-
-const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
-  console.log('🔄 Component render started');
-  
-  // All hooks must be called at the top level, unconditionally
-  const [searchTerm, setSearchTerm] = useState('');
-  console.log('📝 searchTerm state:', searchTerm);
-  
+const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUpdate }) => {
   const [sortConfig, setSortConfig] = useState({
     key: 'totalScore',
     direction: 'none'
   });
-  console.log('🔀 sortConfig state:', sortConfig);
+  const [topicMappings, setTopicMappings] = useState({});
+  const [topicAbbreviations, setTopicAbbreviations] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch topic mappings from API
+  useEffect(() => {
+    const fetchTopicMappings = async () => {
+      try {
+        console.log('Fetching topic mappings from API...');
+        const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCompetency`, {});
+        
+        if (response.data.status === 'success' && Array.isArray(response.data.data)) {
+          const mappings = {};
+          const abbreviations = {};
+          
+          response.data.data.forEach(section => {
+            if (section.topics && Array.isArray(section.topics)) {
+              section.topics.forEach(topic => {
+                if (topic.topic_id && topic.topic_name) {
+                  mappings[topic.topic_id] = [topic.topic_name, section.section_name];
+                  abbreviations[topic.topic_id] = getAbbreviation(topic.topic_name);
+                }
+              });
+            }
+          });
+          
+          console.log('Generated topic mappings:', mappings);
+          console.log('Generated abbreviations:', abbreviations);
+          
+          setTopicMappings(mappings);
+          setTopicAbbreviations(abbreviations);
+        } else {
+          throw new Error('Invalid API response format');
+        }
+      } catch (error) {
+        console.error('Error fetching topic mappings:', error);
+        setError('Failed to load topic mappings');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTopicMappings();
+  }, []);
 
   const reportData = data?.data || data;
-  console.log('📊 reportData:', reportData);
   
-  // Move useMemo hooks to the top level
   const relevantTopics = useMemo(() => {
-    console.log('🔍 Calculating relevantTopics');
-    const topics = Object.entries(topicIdToSubCompetencyMap)
+    console.log('Calculating relevantTopics');
+    const topics = Object.entries(topicMappings)
       .filter(([, [, comp]]) => comp === selectedCompetency)
       .map(([topicId, [name]]) => ({ topicId, name }));
-    console.log('📋 relevantTopics result:', topics);
+    console.log('relevantTopics result:', topics);
     return topics;
-  }, [selectedCompetency]);
+  }, [selectedCompetency, topicMappings]);
 
   const tableRows = useMemo(() => {
-    console.log('📈 Calculating tableRows');
+    console.log('Calculating tableRows');
     if (!reportData || typeof reportData !== 'object') {
-      console.log('❌ Invalid reportData for tableRows');
+      console.log('Invalid reportData for tableRows');
       return [];
     }
     
@@ -83,23 +85,24 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
     Object.entries(reportData).forEach(([unitName, users]) => {
       if (!users || typeof users !== 'object') return;
 
-    Object.entries(users).forEach(([userId, userData]) => {
-      const basic = userData.user_basic_detail || {};
-      const sectionDetails = userData.section_detail || {};
-      const topicMap = {};
+      Object.entries(users).forEach(([userId, userData]) => {
+        const basic = userData.user_basic_detail || {};
+        const sectionDetails = userData.section_detail || {};
+        const topicMap = {};
 
         Object.values(sectionDetails).forEach(section => {
-        const topics = section.topic_detail || {};
-        Object.entries(topics).forEach(([topicId, topic]) => {
-          if (topicIdToSubCompetencyMap[topicId]) {
-            topicMap[topicId] = {
-                score: topic.topic_total_score,
+          const topics = section.topic_detail || {};
+          Object.entries(topics).forEach(([topicId, topic]) => {
+            if (topicMappings[topicId]) {
+              // Use the actual topic score from the data
+              topicMap[topicId] = {
+                score: topic.topic_total_score || '-',
                 unitPercentile: topic.unit_topic_percentile_score,
                 mhPercentile: topic.topic_percentile_score
-            };
-          }
+              };
+            }
+          });
         });
-      });
 
         const totalScore = relevantTopics.reduce((acc, { topicId }) => {
           const raw = topicMap[topicId]?.score;
@@ -107,20 +110,34 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
           return acc + (isNaN(num) ? 0 : num);
         }, 0);
 
-        rows.push({
-        sno: sno++,
-        studentName: basic.student_name || '-',
-        unit: basic.unit_name || unitName,
-        department: basic.department || '-',
-          totalScore: totalScore ? totalScore.toFixed(2) : '-',
+        const row = {
+          sno: sno++,
+          studentName: basic.student_name || '-',
+          unit: basic.unit_name || unitName,
+          department: basic.department || '-',
+          totalScore: totalScore ? totalScore.toFixed(1) : '-',
           topicMap
-        });
+        };
+
+        rows.push(row);
       });
     });
 
-    console.log('📊 tableRows result:', rows);
+    console.log('tableRows result:', rows);
     return rows;
-  }, [reportData, relevantTopics]);
+  }, [reportData, relevantTopics, topicMappings]);
+
+  // Notify parent component when data changes
+  useEffect(() => {
+    if (onDataUpdate && tableRows.length > 0) {
+      onDataUpdate({
+        rows: tableRows,
+        topics: relevantTopics,
+        mappings: topicMappings,
+        abbreviations: topicAbbreviations
+      });
+    }
+  }, [tableRows, relevantTopics, topicMappings, topicAbbreviations, onDataUpdate]);
 
   const filteredRows = useMemo(() => {
     console.log('🔍 Filtering rows with searchTerm:', searchTerm);
@@ -228,12 +245,30 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
     const topic = section.topic_detail[topicId];
     if (!topic) return 0;
 
+    // Calculate score using topic_total_question and correct_marks
     const correctMarks = parseFloat(section.correct_marks || 0);
     const totalQuestions = parseFloat(topic.topic_total_question || 0);
+    
+    if (!isNaN(correctMarks) && !isNaN(totalQuestions)) {
+      const score = correctMarks * totalQuestions;
+      return score.toFixed(1);
+    }
 
-    // Calculate maximum possible score
-    const maxScore = totalQuestions * correctMarks;
-    return maxScore.toFixed(1);
+    return 0;
+  };
+
+  const calculateTotalPossibleScore = () => {
+    if (!reportData) return 0;
+    let totalScore = 0;
+
+    // Sum up all topic scores
+    relevantTopics.forEach(({ topicId }) => {
+      const score = calculateTotalScore(topicId);
+      totalScore += parseFloat(score) || 0;
+    });
+
+    console.log('Total Possible Score:', totalScore);
+    return totalScore.toFixed(1);
   };
 
   const getSortIcon = (key) => {
@@ -256,74 +291,88 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency }) => {
 
   return (
     <div className="table-container">
-      <div className="search-container">
-        <input
-          type="text"
-          className="name-search-input"
-          placeholder="Search by name, department, or unit..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-      
-      {/* Legend for abbreviations */}
-      <div className="competency-legend">
-        <p><strong>Legend:</strong></p>
-        <ul className="legend-list">
-          {relevantTopics.map(({ topicId, name }) => (
-            <li key={topicId}><strong>{topicAbbreviations[topicId]}</strong> - {name}</li>
-          ))}
-        </ul>
-      </div>
-    <div className="table-wrapper">
-      <table className="competency-table">
-        <thead>
-          <tr>
-              <th>S.No</th>
-              <th>Student Name</th>
-              <th>Unit</th>
-              <th>Department</th>
-              <th 
-                onClick={() => handleSort('totalScore')}
-                style={{ cursor: 'pointer' }}
-              >
-                Total Score ({calculateTotalScore(relevantTopics[0]?.topicId)}) 
-                <span style={{ marginLeft: '5px' }}>
-                  {getSortIcon('totalScore')}
-                </span>
-              </th>
-              {relevantTopics.map(({ topicId, name }) => {
-                const abbr = topicAbbreviations[topicId];
-                return (
-                  <React.Fragment key={name}>
-                    <th>{abbr} - Score ({calculateTotalScore(topicId)})</th>
-                    <th>{abbr} - Unit %ile</th>
-                    <th>{abbr} - MH %ile</th>
-                  </React.Fragment>
-                );
-              })}
-          </tr>
-        </thead>
-        <tbody>
-            {sortedAndFilteredRows.map((row) => (
-            <tr key={row.sno}>
-              <td>{row.sno}</td>
-                <td>{safeValue(row.studentName)}</td>
-                <td>{safeValue(row.unit)}</td>
-                <td>{safeValue(row.department)}</td>
-                <td>{safeValue(row.totalScore)}</td>
-                {relevantTopics.map(({ topicId, name }) => (
-                  <React.Fragment key={name}>
-                    <td>{safeValue(row.topicMap[topicId]?.score)}</td>
-                    <td>{renderPercentileBar(row.topicMap[topicId]?.unitPercentile)}</td>
-                    <td>{renderPercentileBar(row.topicMap[topicId]?.mhPercentile)}</td>
-                  </React.Fragment>
+      {isLoading ? (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <div className="loading-text">Loading topic mappings...</div>
+        </div>
+      ) : error ? (
+        <div className="error-message">{error}</div>
+      ) : (
+        <>
+          <div className="search-container">
+            <input
+              type="text"
+              className="name-search-input"
+              placeholder="Search by name, department, or unit..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          {/* Legend for abbreviations */}
+          <div className="competency-legend">
+            <p><strong>Legend:</strong></p>
+            <ul className="legend-list">
+              {relevantTopics.map(({ topicId, name }) => (
+                <li key={`${topicId}-${name}`}>
+                  <strong>{topicAbbreviations[topicId]}</strong> - {name}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="table-wrapper">
+            <table className="competency-table">
+              <thead>
+                <tr>
+                    <th>S.No</th>
+                    <th>Student Name</th>
+                    <th>Unit</th>
+                    <th>Department</th>
+                    <th 
+                      onClick={() => handleSort('totalScore')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Total Score ({calculateTotalPossibleScore()}) 
+                      <span style={{ marginLeft: '5px' }}>
+                        {getSortIcon('totalScore')}
+                      </span>
+                    </th>
+                    {relevantTopics.map(({ topicId, name }) => {
+                      const abbr = topicAbbreviations[topicId];
+                      return (
+                        <React.Fragment key={name}>
+                          <th>{abbr} - Score ({calculateTotalScore(topicId)})</th>
+                          <th>{abbr} - Unit %ile</th>
+                          <th>{abbr} - MH %ile</th>
+                        </React.Fragment>
+                      );
+                    })}
+                </tr>
+              </thead>
+              <tbody>
+                  {sortedAndFilteredRows.map((row) => (
+                  <tr key={row.sno}>
+                    <td>{row.sno}</td>
+                      <td>{safeValue(row.studentName)}</td>
+                      <td>{safeValue(row.unit)}</td>
+                      <td>{safeValue(row.department)}</td>
+                      <td>{safeValue(row.totalScore)}</td>
+                      {relevantTopics.map(({ topicId, name }) => (
+                        <React.Fragment key={name}>
+                          <td>{safeValue(row.topicMap[topicId]?.score)}</td>
+                          <td>{renderPercentileBar(row.topicMap[topicId]?.unitPercentile)}</td>
+                          <td>{renderPercentileBar(row.topicMap[topicId]?.mhPercentile)}</td>
+                        </React.Fragment>
+                      ))}
+                  </tr>
                 ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 };

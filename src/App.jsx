@@ -22,7 +22,7 @@ function App() {
       case 'main-competency':
         return <MainCompetency />;
       case 'user-sub-competency':
-        return <SubCompetency />;
+        return <SubCompetency />;              
       case 'sub-competency':
         return <UserSubCompetency />;
       default:

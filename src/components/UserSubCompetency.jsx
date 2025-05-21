@@ -20,19 +20,12 @@ const UserSubCompetency = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [competencyMappings, setCompetencyMappings] = useState({});
+  const [topicMappings, setTopicMappings] = useState({});
   
   // Create refs for the dropdown components to detect clicks outside
   const unitsDropdownRef = useRef(null);
   const competencyDropdownRef = useRef(null);
-
-  const competencyToSectionId = {
-    'Situation Management': 82,
-    'Quality in Healthcare Delivery': 83,
-    'Relationship Building': 84,
-    'Leadership': 85,
-  };
-
-  const allowedCompetencies = Object.keys(competencyToSectionId);
 
   useEffect(() => {
     fetchUnitsFromAPI();
@@ -40,21 +33,16 @@ const UserSubCompetency = () => {
     
     // Add a global click handler to close dropdowns when clicking outside
     const handleClickOutside = (event) => {
-      // Close Units dropdown if clicking outside of it
       if (unitsDropdownRef.current && !unitsDropdownRef.current.contains(event.target)) {
         setShowUnitsDropdown(false);
       }
       
-      // Close Competency dropdown if clicking outside of it
       if (competencyDropdownRef.current && !competencyDropdownRef.current.contains(event.target)) {
         setShowCompetencyDropdown(false);
       }
     };
     
-    // Add event listener
     document.addEventListener('mousedown', handleClickOutside);
-    
-    // Remove event listener on cleanup
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -67,7 +55,6 @@ const UserSubCompetency = () => {
       });
 
       if (response.data.status === 'success') {
-        // Combine all units from all regions dynamically and sort them
         const allUnits = Object.values(response.data.units).flat().sort();
         setUnits(allUnits);
       } else {
@@ -75,28 +62,38 @@ const UserSubCompetency = () => {
       }
     } catch (error) {
       console.error('❌ Error fetching unit list:', error);
+      setError('Failed to fetch units. Please try again.');
     }
   };
 
   const fetchCompetenciesFromAPI = async () => {
     try {
       setLoading(true);
-      const res = await axios.post(`${BASE_URL}/reportanalytics/getMainCompetency`, {});         
-      if (res.data?.status === 'success' && Array.isArray(res.data.data)) {
-        const allSections = res.data.data.flatMap((entry) => entry.sections);
-        const filteredCompetencies = allowedCompetencies.filter((comp) =>
-          allSections.some((section) => section.section_name === comp)
-        );
-        setCompetencies(filteredCompetencies);
+      const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCompetency`, {});
+      
+      if (response.data.status === 'success' && Array.isArray(response.data.data)) {
+        const mappings = {};
+        const competencyList = new Set();
+        
+        response.data.data.forEach(section => {
+          if (section.section_name && section.quiz_section_id) {
+            mappings[section.section_name] = section.quiz_section_id[0];
+            competencyList.add(section.section_name);
+          }
+        });
+        
+        setCompetencyMappings(mappings);
+        setCompetencies(Array.from(competencyList));
       } else {
-        setCompetencies(allowedCompetencies);
+        throw new Error('Invalid API response format');
       }
-    } catch {
-      setCompetencies(allowedCompetencies);
+    } catch (error) {
+      console.error('Error fetching competencies:', error);
+      setError('Failed to load competencies');
     } finally {
       setLoading(false);
     }
-  };              
+  };
 
   const handleUnitSelect = (unit) => {
     setSelectedUnits((prev) =>
@@ -121,7 +118,11 @@ const UserSubCompetency = () => {
       return;
     }
 
-    const sectionId = competencyToSectionId[selectedCompetency];
+    const sectionId = competencyMappings[selectedCompetency];
+    if (!sectionId) {
+      setError('Invalid competency selected.');
+      return;
+    }
 
     const requestBody = {
       unit: selectedUnits,
@@ -145,46 +146,215 @@ const UserSubCompetency = () => {
   };
 
   const handleExport = () => {
-    if (!reportData) {
+    if (!reportData || !reportData.data) {
       setError('No data available to download. Please apply filters first.');
       return;
     }
 
     try {
+      console.log('Starting Excel export with data:', reportData);
       const flatData = [];
-      Object.entries(reportData.data).forEach(([location, users]) => {
-        Object.entries(users).forEach(([userId, userData]) => {
-          const basicInfo = userData.user_basic_detail || {};
-          Object.entries(userData.section_detail || {}).forEach(([sectionId, section]) => {
-            Object.entries(section.topic_detail || {}).forEach(([topicId, topic]) => {
-              flatData.push({
-                Location: location,
-                'User ID': userId,
-                Name: basicInfo.student_name || 'N/A',
-                Department: basicInfo.department || 'N/A',
-                Section: section.section_name || 'N/A',
-                'Topic ID': topicId,
-                'Topic Score': topic.topic_total_score || '0',
-                'Topic Percentile': topic.topic_percentile_score || '0',
-                'Unit Topic Percentile': topic.unit_topic_percentile_score || '0',
-              });
-            });
+      
+      // Get relevant topics for the selected competency
+      const relevantTopics = Object.entries(topicMappings)
+        .filter(([, [, comp]]) => comp === selectedCompetency)
+        .map(([topicId, [name]]) => ({ topicId, name }));
+
+      console.log('Relevant topics for export:', relevantTopics);
+
+      // Get the first unit's data to calculate total possible scores
+      const firstUnit = Object.values(reportData.data)[0];
+      const firstUser = firstUnit ? Object.values(firstUnit)[0] : null;
+      const sectionDetail = firstUser?.section_detail;
+      const correctMarks = sectionDetail ? parseFloat(sectionDetail.correct_marks || 0) : 0;
+
+      // Process the data using the same logic as the table
+      Object.entries(reportData.data).forEach(([unitName, sections]) => {
+        console.log('Processing unit:', unitName);
+        const topicStats = {};
+
+        // First pass: collect all topic stats
+        Object.values(sections).forEach((section) => {
+          console.log('Processing section:', section);
+          const topics = section.topic_detail || {};
+          Object.entries(topics).forEach(([topicId, topic]) => {
+            if (topicMappings[topicId] && topicMappings[topicId][1] === selectedCompetency) {
+              if (!topicStats[topicId]) {
+                topicStats[topicId] = {
+                  scoreSum: 0,
+                  mhPercentileSum: 0,
+                  count: 0,
+                };
+              }
+
+              const score = parseFloat(topic.unit_topic_score_average || 0);
+              const mhPercentile = parseFloat(topic.unit_topic_score_percentile || 0);
+
+              topicStats[topicId].scoreSum += isNaN(score) ? 0 : score;
+              topicStats[topicId].mhPercentileSum += isNaN(mhPercentile) ? 0 : mhPercentile;
+              topicStats[topicId].count += 1;
+            }
           });
         });
+
+        // Create row data with the same structure as the table
+        const rowData = {
+          'S.No': flatData.length + 1,
+          'Unit': unitName,
+        };
+
+        // Add topic data
+        relevantTopics.forEach(({ topicId, name }) => {
+          const stats = topicStats[topicId];
+          const abbr = getAbbreviation(name);
+          const topic = firstUser?.topic_detail?.[topicId];
+          const totalQuestions = topic ? parseFloat(topic.topic_total_question || 0) : 0;
+          const totalPossibleMarks = (correctMarks * totalQuestions).toFixed(1);
+          
+          if (stats && stats.count > 0) {
+            const unitAvgScore = (stats.scoreSum / stats.count).toFixed(2);
+            const mhPercentile = (stats.mhPercentileSum / stats.count).toFixed(2);
+            
+            rowData[`${abbr} - Score (Out of ${totalPossibleMarks})`] = unitAvgScore;
+            rowData[`${abbr} - MH %ile`] = mhPercentile;
+          } else {
+            rowData[`${abbr} - Score (Out of ${totalPossibleMarks})`] = '-';
+            rowData[`${abbr} - MH %ile`] = '-';
+          }
+        });
+
+        console.log('Final row data:', rowData);
+        flatData.push(rowData);
       });
 
+      console.log('Processed data for Excel:', flatData);
+
+      if (flatData.length === 0) {
+        setError('No data available for the selected filters.');
+        return;
+      }
+
+      // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(flatData);
+
+      // Add legend data below the main data
+      const legendData = relevantTopics.map(({ topicId, name }) => {
+        const topic = firstUser?.topic_detail?.[topicId];
+        const totalQuestions = topic ? parseFloat(topic.topic_total_question || 0) : 0;
+        const totalPossibleMarks = (correctMarks * totalQuestions).toFixed(1);
+        return {
+          'Abbreviation': getAbbreviation(name),
+          'Full Topic Name': `${name} (Out of ${totalPossibleMarks})`
+        };
+      });
+
+      console.log('Legend data:', legendData);
+
+      // Add a blank row
+      XLSX.utils.sheet_add_aoa(worksheet, [['']], { origin: 'A' + (flatData.length + 2) });
+      
+      // Add legend header
+      XLSX.utils.sheet_add_aoa(worksheet, [['Legend:']], { origin: 'A' + (flatData.length + 3) });
+      
+      // Add legend data
+      legendData.forEach((item, index) => {
+        XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Topic Name']}`]], 
+          { origin: 'A' + (flatData.length + 4 + index) });
+      });
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 10 },  // S.No
+        { wch: 20 },  // Unit
+      ];
+
+      // Add dynamic column widths for topic-specific columns
+      const topicColumns = Object.keys(flatData[0]).filter(key => 
+        key.includes('Score') || key.includes('%ile')
+      );
+      topicColumns.forEach(() => {
+        columnWidths.push({ wch: 20 }); // Increased width to accommodate "Out of X"
+      });
+
+      worksheet['!cols'] = columnWidths;
+
+      // Set cell alignment for all cells
+      const range = XLSX.utils.decode_range(worksheet['!ref']);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cell_address = { c: C, r: R };
+          const cell_ref = XLSX.utils.encode_cell(cell_address);
+          if (!worksheet[cell_ref]) continue;
+          
+          // Set alignment for all cells
+          worksheet[cell_ref].s = {
+            alignment: {
+              horizontal: 'left',
+              vertical: 'center'
+            }
+          };
+        }
+      }
+
+      // Create workbook and append worksheet
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sub Competency Report');
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'UnitWiseSubCompetencyReport');
+
+      // Generate Excel file
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
-      saveAs(blob, 'sub_competency_report.xlsx');
-    } catch {
+
+      // Save file
+      const fileName = `UnitWiseSubCompetencyReport_${selectedCompetency}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      console.log('Saving file:', fileName);
+      saveAs(blob, fileName);
+    } catch (error) {
+      console.error('Error generating Excel file:', error);
       setError('Error generating Excel file. Please try again.');
     }
   };
+
+  // Helper function to generate abbreviation from topic name
+  const getAbbreviation = (topicName) => {
+    const words = topicName.split(/[ \/]+/);
+    return words.map(word => word.charAt(0).toUpperCase()).join('');
+  };
+
+  // Add useEffect to fetch topic mappings
+  useEffect(() => {
+    const fetchTopicMappings = async () => {
+      try {
+        console.log('Fetching topic mappings from API...');
+        const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCompetency`, {});
+        
+        if (response.data.status === 'success' && Array.isArray(response.data.data)) {
+          const mappings = {};
+          
+          response.data.data.forEach(section => {
+            if (section.topics && Array.isArray(section.topics)) {
+              section.topics.forEach(topic => {
+                if (topic.topic_id && topic.topic_name) {
+                  mappings[topic.topic_id] = [topic.topic_name, section.section_name];
+                }
+              });
+            }
+          });
+          
+          console.log('Generated topic mappings:', mappings);
+          setTopicMappings(mappings);
+        } else {
+          throw new Error('Invalid API response format');
+        }
+      } catch (error) {
+        console.error('Error fetching topic mappings:', error);
+        setError('Failed to load topic mappings');
+      }
+    };
+
+    fetchTopicMappings();
+  }, []);
 
   return (
     <div className="performance-reports">
@@ -265,8 +435,8 @@ const UserSubCompetency = () => {
       </div>
 
       <div className="report-content">
-        <h2>User Wise Sub Competency Report</h2>
-        <p className="subtitle">Detailed analysis of user sub competencies</p>
+        <h2 className="report-title">User Wise Performance Report</h2>
+        <p className="subtitle">Detailed analysis of user performance metrics</p>
 
         <div className="report-data">
           {loading ? (
