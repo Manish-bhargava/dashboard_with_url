@@ -232,16 +232,90 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
   // Then, define the sorted rows
   const sortedAndFilteredRows = useMemo(() => {
     console.log('🔄 Sorting rows with config:', sortConfig);
-    if (!filteredRows || filteredRows.length === 0) {
-      return [];
+    let result = [...filteredRows];
+    
+    if (sortConfig.key && sortConfig.direction !== 'none') {
+      result.sort((a, b) => {
+        // Handle numeric columns like totalScore and topic scores
+        if (sortConfig.key === 'totalScore') {
+          const aValue = parseFloat(a.totalScore) || 0;
+          const bValue = parseFloat(b.totalScore) || 0;
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        }
+        
+        // Handle sort by S.No
+        if (sortConfig.key === 'sno') {
+          const aValue = parseInt(a.sno) || 0;
+          const bValue = parseInt(b.sno) || 0;
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        }
+        
+        // Handle string columns (studentName, unit, department)
+        if (['studentName', 'unit', 'department'].includes(sortConfig.key)) {
+          const aValue = String(a[sortConfig.key] || '').toLowerCase();
+          const bValue = String(b[sortConfig.key] || '').toLowerCase();
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue.localeCompare(bValue);
+          } else {
+            return bValue.localeCompare(aValue);
+          }
+        }
+        
+        // Handle topic score sorting
+        if (sortConfig.key.startsWith('score_')) {
+          const topicId = sortConfig.key.replace('score_', '');
+          const aValue = parseFloat(a.topicMap[topicId]?.score) || 0;
+          const bValue = parseFloat(b.topicMap[topicId]?.score) || 0;
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        }
+        
+        // Handle unit percentile sorting
+        if (sortConfig.key.startsWith('unitPercentile_')) {
+          const topicId = sortConfig.key.replace('unitPercentile_', '');
+          const aValue = parseFloat(a.topicMap[topicId]?.unitPercentile) || 0;
+          const bValue = parseFloat(b.topicMap[topicId]?.unitPercentile) || 0;
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        }
+        
+        // Handle MH percentile sorting
+        if (sortConfig.key.startsWith('mhPercentile_')) {
+          const topicId = sortConfig.key.replace('mhPercentile_', '');
+          const aValue = parseFloat(a.topicMap[topicId]?.mhPercentile) || 0;
+          const bValue = parseFloat(b.topicMap[topicId]?.mhPercentile) || 0;
+          
+          if (sortConfig.direction === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        }
+        
+        return 0;
+      });
     }
-    const sorted = [...filteredRows].sort((a, b) => {
-      const aValue = a.totalScore === '-' ? -Infinity : parseFloat(a.totalScore);
-      const bValue = b.totalScore === '-' ? -Infinity : parseFloat(b.totalScore);
-      return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
-    });
-    console.log('📊 Sorted rows result:', sorted);
-    return sorted;
+    
+    return result;
   }, [filteredRows, sortConfig]);
 
   // Update parent component when data changes - after sortedAndFilteredRows is defined
@@ -340,10 +414,42 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
             <table className="competency-table">
               <thead>
                 <tr>
-                    <th>S.No</th>
-                    <th>Student Name</th>
-                    <th>Unit</th>
-                    <th>Department</th>
+                    <th 
+                      onClick={() => handleSort('sno')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      S.No
+                      <span style={{ marginLeft: '5px' }}>
+                        {getSortIcon('sno')}
+                      </span>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('studentName')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Student Name
+                      <span style={{ marginLeft: '5px' }}>
+                        {getSortIcon('studentName')}
+                      </span>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('unit')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Unit
+                      <span style={{ marginLeft: '5px' }}>
+                        {getSortIcon('unit')}
+                      </span>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('department')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Department
+                      <span style={{ marginLeft: '5px' }}>
+                        {getSortIcon('department')}
+                      </span>
+                    </th>
                     <th 
                       onClick={() => handleSort('totalScore')}
                       style={{ cursor: 'pointer' }}
@@ -357,18 +463,42 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
                       const abbr = topicAbbreviations[topicId];
                       return (
                         <React.Fragment key={name}>
-                          <th>{abbr} - Score ({calculateTotalScore(topicId)})</th>
-                          <th>{abbr} - Unit %ile</th>
-                          <th>{abbr} - MH %ile</th>
+                          <th 
+                            onClick={() => handleSort(`score_${topicId}`)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {abbr} - Score ({calculateTotalScore(topicId)})
+                            <span style={{ marginLeft: '5px' }}>
+                              {getSortIcon(`score_${topicId}`)}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleSort(`unitPercentile_${topicId}`)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {abbr} - Unit %ile
+                            <span style={{ marginLeft: '5px' }}>
+                              {getSortIcon(`unitPercentile_${topicId}`)}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleSort(`mhPercentile_${topicId}`)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {abbr} - MH %ile
+                            <span style={{ marginLeft: '5px' }}>
+                              {getSortIcon(`mhPercentile_${topicId}`)}
+                            </span>
+                          </th>
                         </React.Fragment>
                       );
                     })}
                 </tr>
               </thead>
               <tbody>
-                  {sortedAndFilteredRows.map((row) => (
+                  {sortedAndFilteredRows.map((row, index) => (
                   <tr key={row.sno}>
-                    <td>{row.sno}</td>
+                    <td>{index + 1}</td>
                       <td>{safeValue(row.studentName)}</td>
                       <td>{safeValue(row.unit)}</td>
                       <td>{safeValue(row.department)}</td>

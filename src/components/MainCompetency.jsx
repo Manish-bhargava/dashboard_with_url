@@ -264,7 +264,9 @@ const MainCompetency = () => {
       
       // Add legend data
       legendData.forEach((item, index) => {
-        XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Competency Name']}`]], 
+        // Remove 'Out of Score' from legend text but keep the abbreviation and competency name
+        const legendText = `${item.Abbreviation} - ${item['Full Competency Name'].split(' (Out of ')[0]}`;
+        XLSX.utils.sheet_add_aoa(worksheet, [[legendText]], 
           { origin: 'A' + (flatData.length + 4 + index) });
       });
 

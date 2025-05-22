@@ -107,6 +107,64 @@
   text-align: center;
   border-bottom: 1px solid #edf2f7;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Ensure percentile cells are perfectly aligned */
+.percentile-cell-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin-top: 10px;
+
+  min-height: 32px;
+}
+
+.mini-percentile-bar {
+  height: 12px;
+  min-width: 50px;
+  max-width: 80px;
+  background: #f0f0f0;
+  border-radius: 6px;
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+}
+
+.mini-percentile-fill {
+  height: 100%;
+  background-color: #0066ff;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.percentile-value {
+  font-size: 0.95em;
+  margin-left: 2px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.competency-table th {
+  background-color: #f8fafc;
+  color: #1a202c;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.competency-table tbody tr {
+  transition: background-color 0.2s;
+}
+
+.competency-table tbody tr:hover {
+  background-color: #f7fafc;
 }
 
 .competency-table th {
@@ -167,6 +225,7 @@
   position: relative;
   min-width: 120px;
   padding: 8px !important;
+  height: 300px;
 }
 
 .percentile-bar {
@@ -587,4 +646,18 @@ justify-content: center;
 .legend-list li strong {
   margin-right: 4px;
   color: #2d3748;
+}
+
+.percentile-cell {
+  position: relative;
+  min-width: 120px;
+  padding: 8px !important;
+  height: 300px;
+}
+
+.mh-percentile{
+  height: 110px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }

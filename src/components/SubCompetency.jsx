@@ -104,6 +104,9 @@ const SubCompetency = () => {
     // Only load dropdown data, not report data
     initializeDropdowns();
     
+    // Clear any previously loaded report data on initial load
+    setReportData(null);
+    
     // Add a global click handler to close dropdowns when clicking outside
     const handleClickOutside = (event) => {
       // Close Units dropdown if clicking outside of it
@@ -111,23 +114,20 @@ const SubCompetency = () => {
         setShowUnitsDropdown(false);
       }
       
-      // Close Competency dropdown if clicking outside of it
+      // Close Competencies dropdown if clicking outside of it
       if (competencyDropdownRef.current && !competencyDropdownRef.current.contains(event.target)) {
         setShowCompetencyDropdown(false);
       }
     };
     
-    // Add event listener
     document.addEventListener('mousedown', handleClickOutside);
-    
-    // Remove event listener on cleanup
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleUnitSelect = (unit) => {
-    console.log('Unit clicked:', unit);
+    // Clear report data whenever units selection changes
+    setReportData(null);
+    
     if (unit === 'all') {
       const newUnits = selectedUnits.length === units.length ? [] : units;
       setSelectedUnits(newUnits);
@@ -146,6 +146,8 @@ const SubCompetency = () => {
   }, [selectedUnits]);
 
   const handleCompetencySelect = (comp) => {
+    // Clear report data whenever competency selection changes
+    setReportData(null);
     setSelectedCompetency(comp.name);
     setShowCompetencyDropdown(false);
   };
@@ -154,8 +156,11 @@ const SubCompetency = () => {
     console.log('Clearing filters...');
     setSelectedUnits([]);
     setSelectedCompetency(null);
-    setReportData(null);
+    setShowUnitsDropdown(false);
+    setShowCompetencyDropdown(false);
     setError(null);
+    // Clear report data when filters are cleared
+    setReportData(null);
   };
 
   const handleApply = async () => {
@@ -164,49 +169,50 @@ const SubCompetency = () => {
       selectedCompetency,
     });
 
-    if (!selectedCompetency || selectedUnits.length === 0) {
-      const msg = '❌ Please select at least one unit and one competency.';
-      console.warn(msg);
-      setError(msg);
-      return;
-    }
-
-    const sectionObj = competencies.find((c) => c.name === selectedCompetency);
-    if (!sectionObj) {
-      const msg = '❌ Competency mapping not found!';
-      console.error(msg);
-      setError(msg);
+    if (selectedUnits.length === 0 || !selectedCompetency) {
+      setError('Please select at least one unit and a competency');
+      // Clear any previous data when apply button is clicked without proper selections
+      setReportData(null);
       return;
     }
 
     setLoading(true);
     setError(null);
+    // Clear previous data before loading new data
+    setReportData(null);
+    console.log('Fetching data with filters:', { selectedUnits, selectedCompetency });
 
     try {
-      console.log('🌐 Fetching report data from API...');
+      // Find the selected competency object
+      const competencyObj = competencies.find(c => c.name === selectedCompetency);
+      
+      if (!competencyObj) {
+        setError('Selected competency not found');
+        setLoading(false);
+        return;
+      }
+
       const requestBody = {
         unit: selectedUnits,
-        section_id: [sectionObj.section_id]
+        section_id: [competencyObj.section_id] // Send as an array to match API expectations
       };
-      console.log('Request body:', requestBody);
 
+      console.log('Sending request body:', requestBody);
+      
       const response = await axios.post(`${BASE_URL}/reportanalytics/getSubCometencyUserReport`, requestBody, {
         headers: { 'Content-Type': 'application/json' }
       });
 
-      console.log('📦 API response:', response.data);
+      console.log('API Response:', response.data);
 
-      if (response.data?.status === 'success') {
-        console.log('✅ Report data received:', response.data.data);
-        setReportData(response.data.data || response.data);
+      if (response.data.status === 'success') {
+        setReportData(response.data.data);
       } else {
-        const msg = response.data?.error || '❌ Invalid data format received';
-        console.warn(msg);
-        setError(msg);
+        setError(response.data.message || 'Failed to fetch report data');
       }
-    } catch (err) {
-      console.error('❌ Error fetching report:', err);
-      setError('Error fetching report data');
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+      setError('Error fetching report data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -310,7 +316,9 @@ const SubCompetency = () => {
         
         // Add legend data
         legendData.forEach((item, index) => {
-          XLSX.utils.sheet_add_aoa(worksheet, [[`${item.Abbreviation} - ${item['Full Topic Name']}`]], 
+          // Remove 'Out of Score' from legend text but keep the abbreviation and topic name
+          const legendText = `${item.Abbreviation} - ${item['Full Topic Name'].split(' (Out of ')[0]}`;
+          XLSX.utils.sheet_add_aoa(worksheet, [[legendText]], 
             { origin: 'A' + (flatData.length + 4 + index) });
         });
 
