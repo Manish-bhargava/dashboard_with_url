@@ -566,138 +566,203 @@ const CompetencyTable = ({ data, searchTerm: initialSearchTerm = '', selectedQui
           ))}
         </ul>
       </div>
-      <table className="competency-table">
-        <thead>
-          <tr>
-            <th 
-              className="sortable-header"
-              onClick={() => handleSort()}
-            >
-              S.No
-              <span className="sort-arrows">
-                {sortOrder === 'none' && '↕️'}
-                {sortOrder === 'asc' && '↑'}
-                {sortOrder === 'desc' && '↓'}
-              </span>
-            </th>
-            <th 
-              className="sortable-header"
-              onClick={() => handleSort()}
-            >
-              Student Name
-              <span className="sort-arrows">
-                {sortOrder === 'none' && '↕️'}
-                {sortOrder === 'asc' && '↑'}
-                {sortOrder === 'desc' && '↓'}
-              </span>
-            </th>
-            <th 
-              className="sortable-header"
-              onClick={() => handleSort()}
-            >
-              Units
-              <span className="sort-arrows">
-                {sortOrder === 'none' && '↕️'}
-                {sortOrder === 'asc' && '↑'}
-                {sortOrder === 'desc' && '↓'}
-              </span>
-            </th>
-            <th 
-              className="sortable-header"
-              onClick={() => handleSort()}
-            >
-              Department
-              <span className="sort-arrows">
-                {sortOrder === 'none' && '↕️'}
-                {sortOrder === 'asc' && '↑'}
-                {sortOrder === 'desc' && '↓'}
-              </span>
-            </th>
-            <th 
-              className="sortable-header"
-              onClick={() => handleSort()}
-            >
-              Total Score (Out of {calculateTotalPossibleScore()})
-              <span className="sort-arrows">
-                {sortOrder === 'none' && '↕️'}
-                {sortOrder === 'asc' && '↑'}
-                {sortOrder === 'desc' && '↓'}
-              </span>
-            </th>
-            {Array.from(sectionNames).map(sectionId => {
-              const abbr = competencyAbbreviations[sectionId] || getAbbreviation(activeCompetencyMap[sectionId] || 'Unknown');
-              const totalScore = calculateTotalScore(sectionId);
-              return (
-                <React.Fragment key={sectionId}>
-                  <th 
-                    className="sortable-header"
-                    onClick={() => handleSort()}
-                  >
-                    {abbr} - Score (Out of {totalScore})
-                    <span className="sort-arrows">
-                      {sortOrder === 'none' && '↕️'}
-                      {sortOrder === 'asc' && '↑'}
-                      {sortOrder === 'desc' && '↓'}
-                    </span>
-                  </th>
-                  <th 
-                    className="sortable-header mh-percentile"
-                    onClick={() => handleSort()}
-                  >
-                    {abbr} - MH %ile
-                    <span className="sort-arrows">
-                      {sortOrder === 'none' && '↕️'}
-                      {sortOrder === 'asc' && '↑'}
-                      {sortOrder === 'desc' && '↓'}
-                    </span>
-                  </th>
-                  <th 
-                    className="sortable-header unit-percentile"
-                    onClick={() => handleSort()}
-                  >
-                    {abbr} - Unit %ile
-                    <span className="sort-arrows">
-                      {sortOrder === 'none' && '↕️'}
-                      {sortOrder === 'asc' && '↑'}
-                      {sortOrder === 'desc' && '↓'}
-                    </span>
-                  </th>
-                </React.Fragment>
-              );
-            })}
+<div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+  <table className="competency-table">
+    <thead>
+      <tr>
+        <th
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+          }}
+          className="sortable-header"
+          onClick={() => handleSort()}
+        >
+          S.No
+          <span className="sort-arrows">
+            {sortOrder === 'none' && '↕️'}
+            {sortOrder === 'asc' && '↑'}
+            {sortOrder === 'desc' && '↓'}
+          </span>
+        </th>
+        <th
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+          }}
+          className="sortable-header"
+          onClick={() => handleSort()}
+        >
+          Student Name
+          <span className="sort-arrows">
+            {sortOrder === 'none' && '↕️'}
+            {sortOrder === 'asc' && '↑'}
+            {sortOrder === 'desc' && '↓'}
+          </span>
+        </th>
+        <th
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+          }}
+          className="sortable-header"
+          onClick={() => handleSort()}
+        >
+          Units
+          <span className="sort-arrows">
+            {sortOrder === 'none' && '↕️'}
+            {sortOrder === 'asc' && '↑'}
+            {sortOrder === 'desc' && '↓'}
+          </span>
+        </th>
+        <th
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+           
+          }}
+          className="sortable-header"
+          onClick={() => handleSort()}
+        >
+          Department
+          <span className="sort-arrows">
+            {sortOrder === 'none' && '↕️'}
+            {sortOrder === 'asc' && '↑'}
+            {sortOrder === 'desc' && '↓'}
+          </span>
+        </th>
+        <th
+          className="sortable-header"
+          
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+           
+          }}
+          onClick={() => handleSort()}
+        >
+          Total Score (Out of {calculateTotalPossibleScore()})
+          <span className="sort-arrows">
+            {sortOrder === 'none' && '↕️'}
+            {sortOrder === 'asc' && '↑'}
+            {sortOrder === 'desc' && '↓'}
+          </span>
+        </th>
+        {Array.from(sectionNames).map((sectionId) => {
+          const abbr =
+            competencyAbbreviations[sectionId] ||
+            getAbbreviation(activeCompetencyMap[sectionId] || 'Unknown');
+          const totalScore = calculateTotalScore(sectionId);
+          return (
+            <React.Fragment key={sectionId}>
+              <th
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                }}
+                className="sortable-header"
+                onClick={() => handleSort()}
+              >
+                {abbr} - Score (Out of {totalScore})
+                <span className="sort-arrows">
+                  {sortOrder === 'none' && '↕️'}
+                  {sortOrder === 'asc' && '↑'}
+                  {sortOrder === 'desc' && '↓'}
+                </span>
+              </th>
+              <th
+            
+                className="sortable-header-mh-percentile"
+                onClick={() => handleSort()}
+                    style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                }}
+              >
+                {abbr} - MH %ile
+                <span className="sort-arrows">
+                  {sortOrder === 'none' && '↕️'}
+                  {sortOrder === 'asc' && '↑'}
+                  {sortOrder === 'desc' && '↓'}
+                </span>
+              </th>
+              <th
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                 
+                }}
+                className="sortable-header unit-percentile"
+                onClick={() => handleSort()}
+              >
+                {abbr} - Unit %ile
+                <span className="sort-arrows">
+                  {sortOrder === 'none' && '↕️'}
+                  {sortOrder === 'asc' && '↑'}
+                  {sortOrder === 'desc' && '↓'}
+                </span>
+              </th>
+            </React.Fragment>
+          );
+        })}
+      </tr>
+    </thead>
+    <tbody>
+      {sortedData.length === 0 ? (
+        <tr>
+          <td
+            colSpan={4 + Array.from(sectionNames).length * 3}
+            className="no-data-message"
+          >
+            No data available for the search term '{localSearchTerm}'
+          </td>
+        </tr>
+      ) : (
+        sortedData.map((row, index) => (
+          <tr key={row.studentId}>
+            <td>{index + 1}</td>
+            <td>{row.studentName}</td>
+            <td>
+              {Array.isArray(row.units)
+                ? row.units.join(', ')
+                : Array.from(row.units || []).join(', ')}
+            </td>
+            <td>{row.department}</td>
+            <td>{row.totalScore}</td>
+            {Array.from(sectionNames).map((sectionId) => (
+              <React.Fragment key={sectionId}>
+                <td>
+                  {row.sectionDetail[sectionId]?.calculated_score || '-'}
+                </td>
+                <td className="mh-percentile">
+                  {renderPercentileBar(
+                    row.sectionDetail[sectionId]?.section_percentile_score ||
+                      '-'
+                  )}
+                </td>
+                <td className="unit-percentile">
+                  {renderPercentileBar(
+                    row.sectionDetail[sectionId]?.unit_section_percentile_score ||
+                      '-'
+                  )}
+                </td>
+              </React.Fragment>
+            ))}
           </tr>
-        </thead>
-        <tbody>
-          {sortedData.length === 0 ? (
-            <tr>
-              <td colSpan={4 + Array.from(sectionNames).length * 3} className="no-data-message">
-                No data available for the search term '{localSearchTerm}'
-              </td>
-            </tr>
-          ) : (
-            sortedData.map((row, index) => (
-              <tr key={row.studentId}>
-                <td>{index + 1}</td>
-                <td>{row.studentName}</td>
-                <td>{Array.isArray(row.units) ? row.units.join(', ') : Array.from(row.units || []).join(', ')}</td>
-                <td>{row.department}</td>
-                <td>{row.totalScore}</td>
-                {Array.from(sectionNames).map(sectionId => (
-                  <React.Fragment key={sectionId}>
-                    <td>{row.sectionDetail[sectionId]?.calculated_score || '-'}</td>
-                    <td className="mh-percentile">
-                      {renderPercentileBar(row.sectionDetail[sectionId]?.section_percentile_score || '-')}
-                    </td>
-                    <td className="unit-percentile">
-                      {renderPercentileBar(row.sectionDetail[sectionId]?.unit_section_percentile_score || '-')}
-                    </td>
-                  </React.Fragment>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
+
     </div>
   );
 };

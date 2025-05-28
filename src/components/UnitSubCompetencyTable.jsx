@@ -409,112 +409,117 @@ const UnitSubCompetencyTable = ({ data, selectedCompetency, searchTerm, onDataUp
               ))}
             </ul>
           </div>
+<div className="table-wrapper">
+  
+<div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: "auto", width: "100%" }}>
 
-          <div className="table-wrapper">
-            <table className="competency-table">
-              <thead>
-                <tr>
-                    <th 
-                      onClick={() => handleSort('sno')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      S.No
-                      <span style={{ marginLeft: '5px' }}>
-                        {getSortIcon('sno')}
-                      </span>
-                    </th>
-                    <th 
-                      onClick={() => handleSort('studentName')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      Student Name
-                      <span style={{ marginLeft: '5px' }}>
-                        {getSortIcon('studentName')}
-                      </span>
-                    </th>
-                    <th 
-                      onClick={() => handleSort('unit')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      Unit
-                      <span style={{ marginLeft: '5px' }}>
-                        {getSortIcon('unit')}
-                      </span>
-                    </th>
-                    <th 
-                      onClick={() => handleSort('department')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      Department
-                      <span style={{ marginLeft: '5px' }}>
-                        {getSortIcon('department')}
-                      </span>
-                    </th>
-                    <th 
-                      onClick={() => handleSort('totalScore')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      Total Score ({calculateTotalPossibleScore()}) 
-                      <span style={{ marginLeft: '5px' }}>
-                        {getSortIcon('totalScore')}
-                      </span>
-                    </th>
-                    {relevantTopics.map(({ topicId, name }) => {
-                      const abbr = topicAbbreviations[topicId];
-                      return (
-                        <React.Fragment key={name}>
-                          <th 
-                            onClick={() => handleSort(`score_${topicId}`)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {abbr} - Score ({calculateTotalScore(topicId)})
-                            <span style={{ marginLeft: '5px' }}>
-                              {getSortIcon(`score_${topicId}`)}
-                            </span>
-                          </th>
-                          <th 
-                            onClick={() => handleSort(`unitPercentile_${topicId}`)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {abbr} - Unit %ile
-                            <span style={{ marginLeft: '5px' }}>
-                              {getSortIcon(`unitPercentile_${topicId}`)}
-                            </span>
-                          </th>
-                          <th 
-                            onClick={() => handleSort(`mhPercentile_${topicId}`)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {abbr} - MH %ile
-                            <span style={{ marginLeft: '5px' }}>
-                              {getSortIcon(`mhPercentile_${topicId}`)}
-                            </span>
-                          </th>
-                        </React.Fragment>
-                      );
-                    })}
-                </tr>
-              </thead>
-              <tbody>
-                  {sortedAndFilteredRows.map((row, index) => (
-                  <tr key={row.sno}>
-                    <td>{index + 1}</td>
-                      <td>{safeValue(row.studentName)}</td>
-                      <td>{safeValue(row.unit)}</td>
-                      <td>{safeValue(row.department)}</td>
-                      <td>{safeValue(row.totalScore)}</td>
-                      {relevantTopics.map(({ topicId, name }) => (
-                        <React.Fragment key={name}>
-                          <td>{safeValue(row.topicMap[topicId]?.score)}</td>
-                          <td>{renderPercentileBar(row.topicMap[topicId]?.unitPercentile)}</td>
-                          <td>{renderPercentileBar(row.topicMap[topicId]?.mhPercentile)}</td>
-                        </React.Fragment>
-                      ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+  <table className="competency-table">
+    <thead>
+      <tr>
+        <th
+          onClick={() => handleSort('sno')}
+          style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+        >
+          S.No
+          <span style={{ marginLeft: '5px' }}>
+            {getSortIcon('sno')}
+          </span>
+        </th>
+        <th
+          onClick={() => handleSort('studentName')}
+          style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+        >
+          Student Name
+          <span style={{ marginLeft: '5px' }}>
+            {getSortIcon('studentName')}
+          </span>
+        </th>
+        <th
+          onClick={() => handleSort('unit')}
+          style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+        >
+          Unit
+          <span style={{ marginLeft: '5px' }}>
+            {getSortIcon('unit')}
+          </span>
+        </th>
+        <th
+          onClick={() => handleSort('department')}
+          style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+        >
+          Department
+          <span style={{ marginLeft: '5px' }}>
+            {getSortIcon('department')}
+          </span>
+        </th>
+        <th
+          onClick={() => handleSort('totalScore')}
+          style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+        >
+          Total Score ({calculateTotalPossibleScore()})
+          <span style={{ marginLeft: '5px' }}>
+            {getSortIcon('totalScore')}
+          </span>
+        </th>
+        {relevantTopics.map(({ topicId, name }) => {
+          const abbr = topicAbbreviations[topicId];
+          return (
+            <React.Fragment key={name}>
+              <th
+                onClick={() => handleSort(`score_${topicId}`)}
+                style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+              >
+                {abbr} - Score ({calculateTotalScore(topicId)})
+                <span style={{ marginLeft: '5px' }}>
+                  {getSortIcon(`score_${topicId}`)}
+                </span>
+              </th>
+              <th
+                onClick={() => handleSort(`unitPercentile_${topicId}`)}
+                style={{ cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1 }}
+              >
+                {abbr} - Unit %ile
+                <span style={{ marginLeft: '5px' }}>
+                  {getSortIcon(`unitPercentile_${topicId}`)}
+                </span>
+              </th>
+              <th
+                onClick={() => handleSort(`mhPercentile_${topicId}`)}
+                style={{ cursor: 'pointer', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}
+              >
+                {abbr} - MH %ile
+                <span style={{ marginLeft: '5px' }}>
+                  {getSortIcon(`mhPercentile_${topicId}`)}
+                </span>
+              </th>
+            </React.Fragment>
+          );
+        })}
+      </tr>
+    </thead>
+    <tbody>
+      {sortedAndFilteredRows.map((row, index) => (
+        <tr key={row.sno}>
+          <td>{index + 1}</td>
+          <td>{safeValue(row.studentName)}</td>
+          <td>{safeValue(row.unit)}</td>
+          <td>{safeValue(row.department)}</td>
+          <td>{safeValue(row.totalScore)}</td>
+          {relevantTopics.map(({ topicId, name }) => (
+            <React.Fragment key={name}>
+              <td>{safeValue(row.topicMap[topicId]?.score)}</td>
+              <td>{renderPercentileBar(row.topicMap[topicId]?.unitPercentile)}</td>
+              <td>{renderPercentileBar(row.topicMap[topicId]?.mhPercentile)}</td>
+            </React.Fragment>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+</div>
+
         </>
       )}
     </div>

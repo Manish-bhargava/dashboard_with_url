@@ -99,6 +99,7 @@
   border-collapse: separate;
   border-spacing: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  position: relative;
 }
 
 .competency-table th,
@@ -660,4 +661,7 @@ justify-content: center;
   display: flex;
   justify-content: center;
   align-items: center;
+}
+.competency-table{
+  overflow: 'visible' 
 }

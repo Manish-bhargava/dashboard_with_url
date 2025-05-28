@@ -432,6 +432,8 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
           ))}
         </ul>
       </div>
+<div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: "auto", width: "100%" }}>
+
       <table className="competency-table">
         <thead>
           <tr>
@@ -476,7 +478,7 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
                     </span>
                   </th>
                   <th 
-                    className="sortable-header mh-percentile"
+                    className="sortable-header-mh-percentile"
                     onClick={() => handleSort(`percentile_${sectionId}`)}
                   >
                     {abbr} - MH %ile
@@ -520,6 +522,8 @@ const CompetencyMainTable = ({ units, quizId, reportData: propReportData, onData
           )}
         </tbody>
       </table>
+</div>
+
     </div>
   );
 };

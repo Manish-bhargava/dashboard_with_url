@@ -456,6 +456,8 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
           ))}
         </ul>
       </div>
+<div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: "auto", width: "100%" }}>
+
       <table className="competency-table">
         <thead>
           <tr>
@@ -501,7 +503,7 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
                     </span>
                   </th>
                   <th 
-                    className="sortable-header mh-percentile"
+                    className="sortable-header-mh-percentile"
                     onClick={() => handleSort(`${name}_percentile`)}
                   >
                     {abbr} - MH %ile
@@ -545,6 +547,7 @@ const UserSubCompetencyTable = ({ data, selectedCompetency, isLoading }) => {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };
