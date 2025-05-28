@@ -33,7 +33,7 @@ function App() {
   return (
     <div className="dashboard">
       <div className="sidebar">
-        <h2><img id="logo"  src="public\BLL_Logo.png" alt="Bodhi Labs Logo" /></h2>
+        <h2><img id="logo" src="/BLL_Logo.png" alt="Bodhi Learning Labs Logo" style={{ maxWidth: '150px', height: 'auto' }} /></h2>
         <ul>
           {menuItems.map((item) => (
             <li
