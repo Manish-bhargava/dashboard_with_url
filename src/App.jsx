@@ -45,6 +45,8 @@ function App() {
             </li>
           ))}
         </ul>
+        <div className="text-xs mt-[40px] text-white-500"> <p >© {new Date().getFullYear()} Bodhi Learning Labs</p>
+        </div>
       </div>
       <div className="main-content">
         <div className="content-header">
@@ -52,6 +54,7 @@ function App() {
         </div>
         {renderContent()}
       </div>
+    
     </div>
   )
 }
